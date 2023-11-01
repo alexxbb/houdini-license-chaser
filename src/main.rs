@@ -1,36 +1,48 @@
 #![allow(unused)]
 
+mod request;
+mod response;
+
+use response::License;
+
 use anyhow::{Context, Result};
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-fn run_sesictrl(hfs: &Path) -> Result<String> {
-    let output = std::process::Command::new(hfs.join("bin").join("sesictrl"))
-        .arg("print-license")
-        .output()?
-        .stdout;
-    let output = String::from_utf8_lossy(&output);
+// https://www.sidefx.com/docs/houdini/ref/utils/sesinetd.html
 
-    let regex = regex_lite::RegexBuilder::new(
-        r#"(.*)(\d+) license\(s\) in use\. (\d+) licenses free. (\d+) in total.*"#,
-    );
-    let regex = regex_lite::RegexBuilder::new(r#".*Lic .*?:.*?\d+ \"(?<app>.+)\".*"#)
-        .dot_matches_new_line(false)
-        .multi_line(true)
-        .crlf(true)
-        .build()?;
-    for m in regex.captures_iter(&output) {
-        dbg!(m.get(1));
-    }
-
-    Ok("".to_string())
-}
+const API_ENDPOINT: &str = "http://vmlic-4:1715/api";
 
 fn main() -> Result<()> {
     let _ = dotenv::dotenv()?;
-
     let hfs = PathBuf::from(std::env::var("HFS").context("HFS Variable not set")?);
 
-    let out = run_sesictrl(&hfs)?;
-    dbg!(out);
+    let client = reqwest::blocking::Client::builder().build()?;
+
+    #[derive(Serialize)]
+    struct Keys(String, Vec<()>, HashMap<String, bool>);
+    let keys = Keys(
+        "cmd_ls".to_string(),
+        vec![],
+        HashMap::from([("show_licenses".to_string(), true)]),
+    );
+
+    let mut params = HashMap::new();
+    params.insert("json", serde_json::to_string(&keys)?);
+
+    let response = client
+        .post(API_ENDPOINT)
+        .header(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-urlencoded"),
+        )
+        .form(&params)
+        .send()?;
+    let response: HashMap<String, Vec<License>> = response.json()?;
+    dbg!(&response[&String::from("licenses")]);
+
     Ok(())
 }
