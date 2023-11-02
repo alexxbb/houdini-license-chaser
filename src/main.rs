@@ -5,6 +5,7 @@ mod response;
 
 use response::License;
 
+use crate::response::{HoudiniVersion, Product};
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
@@ -16,33 +17,61 @@ use std::path::{Path, PathBuf};
 
 const API_ENDPOINT: &str = "http://vmlic-4:1715/api";
 
+#[derive(Serialize)]
+struct Keys(String, Vec<()>, HashMap<String, bool>);
+
 fn main() -> Result<()> {
     let _ = dotenv::dotenv()?;
     let hfs = PathBuf::from(std::env::var("HFS").context("HFS Variable not set")?);
 
-    let client = reqwest::blocking::Client::builder().build()?;
+    let (ctrc_tx, ctrlc_rx) = std::sync::mpsc::sync_channel(100);
+    ctrlc::set_handler(move || {
+        eprintln!("Sending Ctrl-C");
+        let _ = ctrc_tx.send(());
+    });
 
-    #[derive(Serialize)]
-    struct Keys(String, Vec<()>, HashMap<String, bool>);
-    let keys = Keys(
-        "cmd_ls".to_string(),
-        vec![],
-        HashMap::from([("show_licenses".to_string(), true)]),
-    );
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let client = reqwest::blocking::Client::builder().build().unwrap();
 
-    let mut params = HashMap::new();
-    params.insert("json", serde_json::to_string(&keys)?);
+        let keys = Keys(
+            "cmd_ls".to_string(),
+            vec![],
+            HashMap::from([("show_licenses".to_string(), true)]),
+        );
+        let mut params = HashMap::new();
+        params.insert("json", serde_json::to_string(&keys).unwrap());
+        loop {
+            if let Ok(_) = ctrlc_rx.try_recv() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            eprintln!("Sending server request");
+            let response = client
+                .post(API_ENDPOINT)
+                .header(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("application/x-www-urlencoded"),
+                )
+                .form(&params)
+                .send()
+                .unwrap();
+            let response: HashMap<String, Vec<License>> = response.json().unwrap();
+            tx.send(response).expect("data sent");
+        }
+    });
 
-    let response = client
-        .post(API_ENDPOINT)
-        .header(
-            CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-urlencoded"),
-        )
-        .form(&params)
-        .send()?;
-    let response: HashMap<String, Vec<License>> = response.json()?;
-    dbg!(&response[&String::from("licenses")]);
+    while let Ok(data) = rx.recv() {
+        let licenses = &data[&String::from("licenses")];
+        let available_core_lic = licenses
+            .iter()
+            .filter_map(|lic| match lic.product_id {
+                Product::HoudiniCore if lic.version.major == 20 => Some(lic.available),
+                _ => None,
+            })
+            .sum::<i32>();
+        dbg!(available_core_lic);
+    }
 
     Ok(())
 }
