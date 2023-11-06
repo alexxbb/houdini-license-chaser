@@ -1,9 +1,7 @@
 use crate::chaser;
 use iced::futures::channel::mpsc;
 use iced::widget::{button, column, row, text};
-use iced::{
-    alignment::*, Alignment, Application, Command, Element, Length, Settings, Subscription,
-};
+use iced::{alignment::*, Alignment, Application, Command, Element, Length, Subscription};
 
 struct Chaser {
     running: bool,
@@ -11,7 +9,7 @@ struct Chaser {
 
 pub struct App {
     chaser: Chaser,
-    incr: i32,
+    num_core_lic: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -20,6 +18,7 @@ pub enum Message {
     StopChaser,
     ChaserStarted(mpsc::Sender<()>),
     ChaserEvent(chaser::ChaserEvent),
+    ExitApp,
 }
 
 impl Application for App {
@@ -32,7 +31,7 @@ impl Application for App {
         (
             Self {
                 chaser: Chaser { running: false },
-                incr: 0,
+                num_core_lic: 0,
             },
             Command::none(),
         )
@@ -44,6 +43,7 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
+            Message::ExitApp => return iced::window::close(),
             Message::StartChaser => {
                 self.chaser.running = true;
             }
@@ -58,7 +58,17 @@ impl Application for App {
                     eprintln!("Started");
                 }
                 chaser::ChaserEvent::ServerResponse(resp) => {
-                    eprintln!("Licenses array: {}", resp[&String::from("licenses")].len());
+                    let licenses = &resp[&String::from("licenses")];
+                    let available_core_lic = licenses
+                        .iter()
+                        .filter_map(|lic| match lic.product_id {
+                            crate::response::Product::HoudiniCore if lic.version.major == 20 => {
+                                Some(lic.available)
+                            }
+                            _ => None,
+                        })
+                        .sum::<i32>();
+                    self.num_core_lic = available_core_lic;
                 }
                 chaser::ChaserEvent::ServerErrored => {
                     eprintln!("App received server error");
@@ -78,9 +88,12 @@ impl Application for App {
             row![
                 button(text(button_label).horizontal_alignment(Horizontal::Center))
                     .on_press(message)
+                    .padding(10)
                     .width(Length::Fill)],
-            text(format!("{}", self.incr))
+            text(format!("{}", self.num_core_lic)),
+            button(text("Exit").horizontal_alignment(Horizontal::Center)).width(Length::Fill).on_press(Message::ExitApp)
         ]
+        .spacing(10)
         .align_items(Alignment::Center)
         .into()
     }

@@ -15,6 +15,8 @@ fn main() -> Result<()> {
     let mut settings = Settings::default();
     settings.window.min_size = Some((200, 200));
     settings.window.max_size = Some((200, 200));
+    settings.window.resizable = false;
+    settings.window.decorations = false;
     let app = app::App::run(settings)?;
 
     Ok(())
