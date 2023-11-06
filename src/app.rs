@@ -11,6 +11,7 @@ struct Chaser {
 
 pub struct App {
     chaser: Chaser,
+    incr: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +19,7 @@ pub enum Message {
     StartChaser,
     StopChaser,
     ChaserStarted(mpsc::Sender<()>),
-    ChaserEvent { something: i32 },
+    ChaserEvent(chaser::ChaserEvent),
 }
 
 impl Application for App {
@@ -31,6 +32,7 @@ impl Application for App {
         (
             Self {
                 chaser: Chaser { running: false },
+                incr: 0,
             },
             Command::none(),
         )
@@ -48,12 +50,20 @@ impl Application for App {
             Message::StopChaser => {
                 self.chaser.running = false;
             }
-            Message::ChaserStarted(receiver) => {
+            Message::ChaserStarted(sender) => {
                 dbg!("Chaser Started");
             }
-            Message::ChaserEvent { something } => {
-                dbg!(something);
-            }
+            Message::ChaserEvent(event) => match event {
+                chaser::ChaserEvent::ServerStarted => {
+                    eprintln!("Started");
+                }
+                chaser::ChaserEvent::ServerResponse(resp) => {
+                    eprintln!("Licenses array: {}", resp[&String::from("licenses")].len());
+                }
+                chaser::ChaserEvent::ServerErrored => {
+                    eprintln!("App received server error");
+                }
+            },
         }
         Command::none()
     }
@@ -68,13 +78,24 @@ impl Application for App {
             row![
                 button(text(button_label).horizontal_alignment(Horizontal::Center))
                     .on_press(message)
-                    .width(Length::Fill)]
+                    .width(Length::Fill)],
+            text(format!("{}", self.incr))
         ]
         .align_items(Alignment::Center)
         .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        chaser::subscribe()
+        if self.chaser.running {
+            chaser::subscribe()
+        } else {
+            Subscription::none()
+        }
     }
+}
+
+#[derive(Debug, Clone)]
+enum SubState {
+    Starting,
+    Ready,
 }
