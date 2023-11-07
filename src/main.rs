@@ -6,6 +6,9 @@ mod chaser;
 mod request;
 mod response;
 
+const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye.png"));
+const ICON_WARN: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/warn.png"));
+
 use anyhow::{Context, Result};
 use iced::application::Application;
 use iced::Settings;
@@ -15,10 +18,10 @@ fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
     let mut settings = Settings::default();
-    settings.window.icon = Some(iced::window::icon::from_file(format!(
-        "{}/assets/eye.png",
-        env!("CARGO_MANIFEST_DIR")
-    ))?);
+    settings.window.icon = Some(iced::window::icon::from_file_data(
+        ICON,
+        Some(image::ImageFormat::Png),
+    )?);
     settings.window.min_size = Some((200, 200));
     settings.window.max_size = Some((200, 200));
     settings.window.resizable = false;

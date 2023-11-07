@@ -11,25 +11,27 @@ struct Chaser {
 
 const DETACHED_PROCESS: u32 = 0x00000008;
 
-use iced::widget::{image::Handle, Image};
+use iced::widget::image::Handle;
 #[derive(Debug, Clone)]
 enum StatusIcon {
-    Normal(String),
-    Warning(String),
-    Error(String),
+    Normal(&'static [u8]),
+    Warning(&'static [u8]),
+    Error(&'static [u8]),
 }
+
+use crate::ICON;
 
 impl StatusIcon {
     fn normal() -> Self {
-        Self::Normal(format!("{}/assets/eye.png", env!("CARGO_MANIFEST_DIR")))
+        Self::Normal(ICON)
     }
 
     fn warning() -> Self {
-        Self::Normal(format!("{}/assets/warn.png", env!("CARGO_MANIFEST_DIR")))
+        Self::Warning(ICON)
     }
 
     fn error() -> Self {
-        Self::Normal(format!("{}/assets/warn.png", env!("CARGO_MANIFEST_DIR")))
+        Self::Warning(ICON)
     }
 }
 
@@ -37,6 +39,7 @@ pub struct App {
     chaser: Chaser,
     num_core_lic: i32,
     status_icon: StatusIcon,
+    status_message: String,
     auto_launch_houdini: bool,
 }
 
@@ -47,7 +50,7 @@ pub enum Message {
     ChaserEvent(chaser::ChaserEvent),
     ExitApp,
     AutoLaunchHoudini(bool),
-    HoudiniLaunched(()),
+    HoudiniLaunched(bool),
 }
 
 impl Application for App {
@@ -62,6 +65,7 @@ impl Application for App {
                 chaser: Chaser { running: false },
                 num_core_lic: 0,
                 status_icon: StatusIcon::normal(),
+                status_message: String::new(),
                 auto_launch_houdini: true,
             },
             Command::none(),
@@ -74,7 +78,13 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::HoudiniLaunched(_) => return iced::window::close(),
+            Message::HoudiniLaunched(launched) => match launched {
+                true => return iced::window::close(),
+                false => {
+                    self.status_message = String::from("Could not launch Houdini");
+                    self.status_icon = StatusIcon::error();
+                }
+            },
             Message::ExitApp => return iced::window::close(),
             Message::StartChaser => {
                 self.chaser.running = true;
@@ -112,9 +122,10 @@ impl Application for App {
                                     .stdin(std::process::Stdio::null())
                                     .spawn()
                                 {
-                                    Ok(_) => (),
+                                    Ok(_) => true,
                                     Err(e) => {
-                                        eprintln!("Could not start Houdini!")
+                                        eprintln!("Could not start Houdini!");
+                                        false
                                     }
                                 }
                             },
@@ -123,7 +134,7 @@ impl Application for App {
                     }
                 }
                 chaser::ChaserEvent::ServerErrored => {
-                    eprintln!("App received server error");
+                    self.status_message = String::from("Chaser Error");
                     self.status_icon = StatusIcon::error();
                 }
             },
@@ -137,24 +148,25 @@ impl Application for App {
     #[rustfmt::skip]
     fn view(&self) -> Element<'_, Self::Message> {
         let (button_label, message) = if self.chaser.running {
-            ("Stop Chaser", Message::StopChaser)
-        } else {("Start Chaser", Message::StartChaser)};
+            ("Stop Chasing", Message::StopChaser)
+        } else {("Start Chasing", Message::StartChaser)};
 
         let spacer = iced::widget::Space::with_height(80);
-        let icon_file = match &self.status_icon {
-            StatusIcon::Normal(f) => f.as_str(),
-            StatusIcon::Warning(f) => f.as_str(),
-            StatusIcon::Error(f) => f.as_str()
+        let icon_file = match self.status_icon {
+            StatusIcon::Normal(f) => f,
+            StatusIcon::Warning(f) => f,
+            StatusIcon::Error(f) => f,
         };
         let launch_houdini_chb = checkbox("Auto-Launch Houdini",
                                           self.auto_launch_houdini,
                                           Message::AutoLaunchHoudini).size(20).spacing(5);
+        let handle = Handle::from_memory(icon_file);
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
-            tooltip(image(icon_file).width(50), "Some Text", Position::FollowCursor),
+            tooltip(image(handle).width(50), &self.status_message, Position::FollowCursor),
             launch_houdini_chb.width(180),
             row![button(text("Exit").horizontal_alignment(Horizontal::Center))
             .on_press(Message::ExitApp)
@@ -180,6 +192,10 @@ impl Application for App {
                 _ => None,
             }),
         ])
+    }
+
+    fn theme(&self) -> iced::Theme {
+        iced::Theme::Light
     }
 }
 
