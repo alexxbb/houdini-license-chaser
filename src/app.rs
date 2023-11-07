@@ -3,7 +3,9 @@ use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
 use iced::mouse::{Button, Event as MouseEvent};
 use iced::widget::tooltip::Position;
-use iced::widget::{button, checkbox, column, container, image, row, text, tooltip};
+use iced::widget::{
+    button, checkbox, column, container, image as image_widget, row, text, tooltip,
+};
 use iced::Point;
 use iced::{alignment::*, Alignment, Application, Command, Element, Event, Length, Subscription};
 use std::time::Duration;
@@ -35,6 +37,7 @@ impl StatusIcon {
 }
 
 pub struct App {
+    frame: u32,
     chaser_subscribe: bool,
     chaser_running: bool,
     num_core_lic: Option<i32>,
@@ -49,7 +52,8 @@ pub enum Message {
     StopChaser,
     ChaserEvent(chaser::ChaserEvent),
     ExitApp,
-    MouseMoved(Option<Point>),
+    Tick,
+    MouseMoved(Point),
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
 }
@@ -66,6 +70,7 @@ impl Application for App {
                 chaser_subscribe: false,
                 chaser_running: false,
                 num_core_lic: None,
+                frame: 1,
                 status_icon: StatusIcon::normal(),
                 status_message: String::new(),
                 auto_launch_houdini: true,
@@ -80,9 +85,10 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::MouseMoved(point) => {
-                eprintln!("Mouse moved: {point:?}");
+            Message::Tick => {
+                self.frame = self.frame.wrapping_add(1);
             }
+            Message::MouseMoved(_point) => return iced::window::drag(),
             Message::HoudiniLaunched(launched) => match launched {
                 true => return iced::window::close(),
                 false => {
@@ -168,14 +174,19 @@ impl Application for App {
                                           self.auto_launch_houdini,
                                           Message::AutoLaunchHoudini).size(20).spacing(5);
         let num_license_text = {
-            text(format!("Core License #: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
+            text(format!("# Of Core Licenses: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
+        };
+        let icon = {
+            let img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
+            let mut img = image::imageops::huerotate(&img, self.frame as i32);
+            image_widget(Handle::from_pixels(64, 64, img.into_raw())).width(70)
         };
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
-            tooltip(image(Handle::from_memory(icon_file)).width(50), &self.status_message, Position::FollowCursor),
+            tooltip(icon, &self.status_message, Position::FollowCursor),
             num_license_text,
             launch_houdini_chb.width(180),
             row![button(text("Exit").horizontal_alignment(Horizontal::Center))
@@ -191,15 +202,21 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch(vec![
             if self.chaser_subscribe {
-                chaser::subscribe()
+                Subscription::batch(vec![
+                    iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
+                    chaser::subscribe(),
+                ])
             } else {
                 Subscription::none()
             },
-            iced::subscription::events_with(|event, status| match dbg!(event) {
+            iced::subscription::events_with(|event, status| match event {
                 Event::Keyboard(KeyBoardEvent::KeyPressed {
                     key_code: KeyCode::Escape,
                     ..
                 }) => Some(Message::ExitApp),
+                Event::Mouse(MouseEvent::CursorMoved { position }) => {
+                    Some(Message::MouseMoved(position))
+                }
                 e => None,
             }),
         ])

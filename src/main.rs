@@ -1,5 +1,5 @@
 #![allow(unused)]
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 
 mod app;
 mod chaser;
@@ -22,8 +22,8 @@ fn main() -> Result<()> {
         ICON,
         Some(image::ImageFormat::Png),
     )?);
-    settings.window.min_size = Some((200, 200));
-    settings.window.max_size = Some((200, 200));
+    settings.window.min_size = Some((200, 220));
+    settings.window.max_size = Some((200, 220));
     settings.window.resizable = false;
     settings.window.decorations = false;
     let app = app::App::run(settings)?;
