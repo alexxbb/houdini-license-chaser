@@ -72,7 +72,6 @@ pub fn subscribe() -> subscription::Subscription<Message> {
                         params.insert(String::from("json"), serde_json::to_string(&keys).unwrap());
                         params
                     });
-                    eprintln!("Sending server request");
                     let request = client
                         .post(API_ENDPOINT)
                         .header(

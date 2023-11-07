@@ -12,7 +12,15 @@ serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 reqwest = { version = "0.11.22", features = ["json"] }
 ctrlc = "3.4.1"
-iced = { version = "0.10.0", features = ["tokio"] }
+iced = { version = "0.10.0", features = ["tokio", "image"] }
 
 [dependencies.tokio]
 version = "1.33.0"
+features = ["process"]
+
+[dependencies.image]
+version = "0.24.7"
+features = ["png"]
+
+[profile.release]
+strip = true
