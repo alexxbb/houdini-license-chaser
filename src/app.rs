@@ -1,13 +1,12 @@
 use crate::chaser;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
+use iced::mouse::{Button, Event as MouseEvent};
 use iced::widget::tooltip::Position;
 use iced::widget::{button, checkbox, column, container, image, row, text, tooltip};
+use iced::Point;
 use iced::{alignment::*, Alignment, Application, Command, Element, Event, Length, Subscription};
-
-struct Chaser {
-    running: bool,
-}
+use std::time::Duration;
 
 const DETACHED_PROCESS: u32 = 0x00000008;
 
@@ -36,8 +35,9 @@ impl StatusIcon {
 }
 
 pub struct App {
-    chaser: Chaser,
-    num_core_lic: i32,
+    chaser_subscribe: bool,
+    chaser_running: bool,
+    num_core_lic: Option<i32>,
     status_icon: StatusIcon,
     status_message: String,
     auto_launch_houdini: bool,
@@ -49,6 +49,7 @@ pub enum Message {
     StopChaser,
     ChaserEvent(chaser::ChaserEvent),
     ExitApp,
+    MouseMoved(Option<Point>),
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
 }
@@ -62,8 +63,9 @@ impl Application for App {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         (
             Self {
-                chaser: Chaser { running: false },
-                num_core_lic: 0,
+                chaser_subscribe: false,
+                chaser_running: false,
+                num_core_lic: None,
                 status_icon: StatusIcon::normal(),
                 status_message: String::new(),
                 auto_launch_houdini: true,
@@ -78,6 +80,9 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
+            Message::MouseMoved(point) => {
+                eprintln!("Mouse moved: {point:?}");
+            }
             Message::HoudiniLaunched(launched) => match launched {
                 true => return iced::window::close(),
                 false => {
@@ -87,13 +92,14 @@ impl Application for App {
             },
             Message::ExitApp => return iced::window::close(),
             Message::StartChaser => {
-                self.chaser.running = true;
+                self.chaser_subscribe = true;
             }
             Message::StopChaser => {
-                self.chaser.running = false;
+                self.chaser_subscribe = false;
             }
             Message::ChaserEvent(event) => match event {
                 chaser::ChaserEvent::ServerStarted => {
+                    self.chaser_running = true;
                     eprintln!("Started");
                 }
                 chaser::ChaserEvent::ServerResponse(resp) => {
@@ -107,12 +113,13 @@ impl Application for App {
                             _ => None,
                         })
                         .sum::<i32>();
-                    self.num_core_lic = available_core_lic;
+                    self.num_core_lic = Some(available_core_lic);
 
-                    if self.auto_launch_houdini && self.num_core_lic > 0 {
+                    if self.auto_launch_houdini && available_core_lic > 0 {
                         let hfs = std::env::var("HFS").expect("TODO");
                         let hbin = std::path::Path::new(&hfs).join("bin").join("houdinicore");
-                        self.chaser.running = false;
+                        self.chaser_subscribe = false;
+                        self.chaser_running = false;
                         return Command::perform(
                             async move {
                                 match tokio::process::Command::new(&hbin)
@@ -147,7 +154,7 @@ impl Application for App {
 
     #[rustfmt::skip]
     fn view(&self) -> Element<'_, Self::Message> {
-        let (button_label, message) = if self.chaser.running {
+        let (button_label, message) = if self.chaser_subscribe {
             ("Stop Chasing", Message::StopChaser)
         } else {("Start Chasing", Message::StartChaser)};
 
@@ -160,13 +167,16 @@ impl Application for App {
         let launch_houdini_chb = checkbox("Auto-Launch Houdini",
                                           self.auto_launch_houdini,
                                           Message::AutoLaunchHoudini).size(20).spacing(5);
-        let handle = Handle::from_memory(icon_file);
+        let num_license_text = {
+            text(format!("Core License #: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
+        };
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
-            tooltip(image(handle).width(50), &self.status_message, Position::FollowCursor),
+            tooltip(image(Handle::from_memory(icon_file)).width(50), &self.status_message, Position::FollowCursor),
+            num_license_text,
             launch_houdini_chb.width(180),
             row![button(text("Exit").horizontal_alignment(Horizontal::Center))
             .on_press(Message::ExitApp)
@@ -174,22 +184,23 @@ impl Application for App {
             ].align_items(Alignment::Center).width(180)
         ].spacing(10).align_items(Alignment::Center);
 
-        container(content).width(Length::Fill).height(Length::Fill).center_x().center_y().into()
+        container(content).width(Length::Fill).height(Length::Fill).center_x().center_y()
+            .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch(vec![
-            if self.chaser.running {
+            if self.chaser_subscribe {
                 chaser::subscribe()
             } else {
                 Subscription::none()
             },
-            iced::subscription::events_with(|event, status| match event {
+            iced::subscription::events_with(|event, status| match dbg!(event) {
                 Event::Keyboard(KeyBoardEvent::KeyPressed {
                     key_code: KeyCode::Escape,
                     ..
                 }) => Some(Message::ExitApp),
-                _ => None,
+                e => None,
             }),
         ])
     }
