@@ -2,6 +2,7 @@ use crate::chaser;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
 use iced::mouse::{Button, Event as MouseEvent};
+use iced::widget::text::LineHeight;
 use iced::widget::tooltip::Position;
 use iced::widget::{
     button, checkbox, column, container, image as image_widget, row, text, tooltip,
@@ -40,6 +41,7 @@ pub struct App {
     frame: u32,
     chaser_subscribe: bool,
     chaser_running: bool,
+    chaser_num_pings: u32,
     num_core_lic: Option<i32>,
     status_icon: StatusIcon,
     status_message: String,
@@ -69,6 +71,7 @@ impl Application for App {
             Self {
                 chaser_subscribe: false,
                 chaser_running: false,
+                chaser_num_pings: 0,
                 num_core_lic: None,
                 frame: 1,
                 status_icon: StatusIcon::normal(),
@@ -88,7 +91,9 @@ impl Application for App {
             Message::Tick => {
                 self.frame = self.frame.wrapping_add(1);
             }
-            Message::MouseMoved(_point) => return iced::window::drag(),
+            Message::MouseMoved(_point) => {
+                // return iced::window::drag()
+            }
             Message::HoudiniLaunched(launched) => match launched {
                 true => return iced::window::close(),
                 false => {
@@ -106,9 +111,9 @@ impl Application for App {
             Message::ChaserEvent(event) => match event {
                 chaser::ChaserEvent::ServerStarted => {
                     self.chaser_running = true;
-                    eprintln!("Started");
                 }
                 chaser::ChaserEvent::ServerResponse(resp) => {
+                    self.chaser_num_pings += 1;
                     let licenses = &resp[&String::from("licenses")];
                     let available_core_lic = licenses
                         .iter()
@@ -174,12 +179,12 @@ impl Application for App {
                                           self.auto_launch_houdini,
                                           Message::AutoLaunchHoudini).size(20).spacing(5);
         let num_license_text = {
-            text(format!("# Of Core Licenses: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
+            text(format!("Core Licenses Count: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
         };
         let icon = {
             let img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
             let mut img = image::imageops::huerotate(&img, self.frame as i32);
-            image_widget(Handle::from_pixels(64, 64, img.into_raw())).width(70)
+            image_widget(Handle::from_pixels(128, 92, img.into_raw())).width(70)
         };
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
@@ -187,9 +192,10 @@ impl Application for App {
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
             tooltip(icon, &self.status_message, Position::FollowCursor),
+            text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
             launch_houdini_chb.width(180),
-            row![button(text("Exit").horizontal_alignment(Horizontal::Center))
+            row![button(text("Exit").horizontal_alignment(Horizontal::Center).line_height(LineHeight::Relative(1.2)))
             .on_press(Message::ExitApp)
                 .width(Length::Fill)
             ].align_items(Alignment::Center).width(180)
@@ -197,6 +203,10 @@ impl Application for App {
 
         container(content).width(Length::Fill).height(Length::Fill).center_x().center_y()
             .into()
+    }
+
+    fn theme(&self) -> iced::Theme {
+        iced::Theme::Light
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -214,16 +224,9 @@ impl Application for App {
                     key_code: KeyCode::Escape,
                     ..
                 }) => Some(Message::ExitApp),
-                Event::Mouse(MouseEvent::CursorMoved { position }) => {
-                    Some(Message::MouseMoved(position))
-                }
                 e => None,
             }),
         ])
-    }
-
-    fn theme(&self) -> iced::Theme {
-        iced::Theme::Light
     }
 }
 

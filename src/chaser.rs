@@ -21,18 +21,7 @@ const API_ENDPOINT: &str = "http://vmlic-4:1715/api";
 #[derive(Serialize)]
 struct Keys(String, Vec<()>, HashMap<String, bool>);
 
-pub struct Chaser {}
-
-impl Chaser {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn start() {}
-
-    pub fn stop() {}
-}
-
+#[derive(Hash)]
 enum ChaserState {
     Starting,
     Working,
@@ -49,7 +38,7 @@ static PARAMS: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 pub fn subscribe() -> subscription::Subscription<Message> {
     subscription::unfold(
-        std::any::TypeId::of::<Chaser>(),
+        std::any::TypeId::of::<ChaserState>(),
         ChaserState::Starting,
         |state| async move {
             match state {
@@ -58,7 +47,7 @@ pub fn subscribe() -> subscription::Subscription<Message> {
                     ChaserState::Working,
                 ),
                 ChaserState::Working => {
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
 
                     let client = reqwest::Client::builder().build().unwrap();
 

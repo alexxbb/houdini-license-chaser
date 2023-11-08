@@ -1,12 +1,12 @@
 #![allow(unused)]
-// #![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 mod app;
 mod chaser;
 mod request;
 mod response;
 
-const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye.png"));
+const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye2.png"));
 const ICON_WARN: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/warn.png"));
 
 use anyhow::{Context, Result};
@@ -22,8 +22,9 @@ fn main() -> Result<()> {
         ICON,
         Some(image::ImageFormat::Png),
     )?);
-    settings.window.min_size = Some((200, 220));
-    settings.window.max_size = Some((200, 220));
+    settings.window.level = iced::window::Level::AlwaysOnTop;
+    settings.window.min_size = Some((200, 250));
+    settings.window.max_size = Some((200, 250));
     settings.window.resizable = false;
     settings.window.decorations = false;
     let app = app::App::run(settings)?;
