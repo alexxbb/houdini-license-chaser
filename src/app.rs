@@ -14,6 +14,8 @@ use std::time::Duration;
 const DETACHED_PROCESS: u32 = 0x00000008;
 
 use iced::widget::image::Handle;
+use image::{GenericImage, Rgba};
+
 #[derive(Debug, Clone)]
 enum StatusIcon {
     Normal(&'static [u8]),
@@ -181,17 +183,28 @@ impl Application for App {
         let num_license_text = {
             text(format!("Core Licenses Count: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
         };
-        let icon = {
-            let img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
-            let mut img = image::imageops::huerotate(&img, self.frame as i32);
-            image_widget(Handle::from_pixels(128, 92, img.into_raw())).width(70)
+        let icon_widget = {
+            let mut img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
+            let width = img.width();
+            let height = img.height();
+            let img_bytes = if self.chaser_subscribe {
+                image::imageops::colorops::huerotate(&img, (self.frame * 2) as i32).to_vec()
+            } else {
+                for (x, y, pixel) in img.to_luma_alpha8().enumerate_pixels() {
+                    let luma = pixel[0];
+                    let alpha = pixel[1];
+                    img.put_pixel(x, y, Rgba([luma, luma, luma, alpha]));
+                }
+                img.into_bytes()
+            };
+            image_widget(Handle::from_pixels(width, height, img_bytes)).width(70)
         };
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
-            tooltip(icon, &self.status_message, Position::FollowCursor),
+            icon_widget,
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
             launch_houdini_chb.width(180),
