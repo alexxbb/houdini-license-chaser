@@ -1,4 +1,5 @@
 use crate::chaser;
+use crate::config::{AppCache, UserConfig};
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
 use iced::mouse::{Button, Event as MouseEvent};
@@ -16,6 +17,15 @@ const DETACHED_PROCESS: u32 = 0x00000008;
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
 
+macro_rules! cfg_windows {
+    ($($item:item)*) => {
+        $(
+            #[cfg(any(all(doc, docsrs), windows))]
+            #[cfg_attr(docsrs, doc(cfg(windows)))]
+            $item
+        )*
+    }
+}
 #[derive(Debug, Clone)]
 enum StatusIcon {
     Normal(&'static [u8]),
@@ -48,6 +58,7 @@ pub struct App {
     status_icon: StatusIcon,
     status_message: String,
     auto_launch_houdini: bool,
+    configs: (AppCache, UserConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +69,7 @@ pub enum Message {
     ExitApp,
     Tick,
     MouseMoved(Point),
+    WindowMoved(i32, i32),
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
 }
@@ -66,9 +78,9 @@ impl Application for App {
     type Executor = iced::executor::Default;
     type Message = Message;
     type Theme = iced::theme::Theme;
-    type Flags = ();
+    type Flags = (AppCache, UserConfig);
 
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+    fn new(flags: Self::Flags) -> (Self, Command<Message>) {
         (
             Self {
                 chaser_subscribe: false,
@@ -79,6 +91,7 @@ impl Application for App {
                 status_icon: StatusIcon::normal(),
                 status_message: String::new(),
                 auto_launch_houdini: true,
+                configs: flags,
             },
             Command::none(),
         )
@@ -96,14 +109,22 @@ impl Application for App {
             Message::MouseMoved(_point) => {
                 // return iced::window::drag()
             }
+            Message::WindowMoved(x, y) => {
+                self.configs.0.window_position = [x, y];
+            }
             Message::HoudiniLaunched(launched) => match launched {
-                true => return iced::window::close(),
+                true => {
+                    self.chaser_subscribe = false;
+                }
                 false => {
                     self.status_message = String::from("Could not launch Houdini");
                     self.status_icon = StatusIcon::error();
                 }
             },
-            Message::ExitApp => return iced::window::close(),
+            Message::ExitApp => {
+                let _ = self.configs.0.save();
+                return iced::window::close();
+            }
             Message::StartChaser => {
                 self.chaser_subscribe = true;
             }
@@ -135,13 +156,16 @@ impl Application for App {
                         self.chaser_running = false;
                         return Command::perform(
                             async move {
-                                match tokio::process::Command::new(&hbin)
-                                    .creation_flags(DETACHED_PROCESS)
+                                let mut command = tokio::process::Command::new(&hbin);
+                                command
                                     .stdout(std::process::Stdio::null())
                                     .stderr(std::process::Stdio::null())
-                                    .stdin(std::process::Stdio::null())
-                                    .spawn()
-                                {
+                                    .stdin(std::process::Stdio::null());
+
+                                #[cfg(windows)]
+                                command.creation_flags(DETACHED_PROCESS);
+
+                                match command.spawn() {
                                     Ok(_) => true,
                                     Err(e) => {
                                         eprintln!("Could not start Houdini!");
@@ -237,6 +261,10 @@ impl Application for App {
                     key_code: KeyCode::Escape,
                     ..
                 }) => Some(Message::ExitApp),
+                Event::Window(e) => match e {
+                    iced::window::Event::Moved { x, y } => Some(Message::WindowMoved(x, y)),
+                    _ => None,
+                },
                 e => None,
             }),
         ])
