@@ -12,6 +12,8 @@ use iced::Point;
 use iced::{alignment::*, Alignment, Application, Command, Element, Event, Length, Subscription};
 use std::time::Duration;
 
+use crate::widgets::{IconState, StatusImage};
+
 const DETACHED_PROCESS: u32 = 0x00000008;
 
 use iced::widget::image::Handle;
@@ -46,7 +48,7 @@ pub struct App {
     chaser_running: bool,
     chaser_num_pings: u32,
     num_core_lic: Option<i32>,
-    status_icon: StatusIcon,
+    status_image: StatusImage,
     status_message: String,
     auto_launch_houdini: bool,
     configs: (AppCache, UserConfig),
@@ -79,7 +81,7 @@ impl Application for App {
                 chaser_num_pings: 0,
                 num_core_lic: None,
                 frame: 1,
-                status_icon: StatusIcon::normal(),
+                status_image: StatusImage::new(),
                 status_message: String::new(),
                 auto_launch_houdini: true,
                 configs: flags,
@@ -96,6 +98,7 @@ impl Application for App {
         match message {
             Message::Tick => {
                 self.frame = self.frame.wrapping_add(1);
+                self.status_image.set_frame(self.frame);
             }
             Message::MouseMoved(_point) => {
                 // return iced::window::drag()
@@ -109,7 +112,7 @@ impl Application for App {
                 }
                 false => {
                     self.status_message = String::from("Could not launch Houdini");
-                    self.status_icon = StatusIcon::error();
+                    self.status_image.set_state(IconState::Error)
                 }
             },
             Message::ExitApp => {
@@ -118,13 +121,16 @@ impl Application for App {
             }
             Message::StartChaser => {
                 self.chaser_subscribe = true;
+                self.status_image.set_state(IconState::Working)
             }
             Message::StopChaser => {
                 self.chaser_subscribe = false;
+                self.status_image.set_state(IconState::Idle)
             }
             Message::ChaserEvent(event) => match event {
                 chaser::ChaserEvent::ServerStarted => {
                     self.chaser_running = true;
+                    self.status_image.set_state(IconState::Working)
                 }
                 chaser::ChaserEvent::ServerResponse(resp) => {
                     self.chaser_num_pings += 1;
@@ -145,6 +151,7 @@ impl Application for App {
                         let hbin = std::path::Path::new(&hfs).join("bin").join("houdinicore");
                         self.chaser_subscribe = false;
                         self.chaser_running = false;
+                        self.status_image.set_state(IconState::Idle);
                         return Command::perform(
                             async move {
                                 let mut command = tokio::process::Command::new(&hbin);
@@ -170,7 +177,7 @@ impl Application for App {
                 }
                 chaser::ChaserEvent::ServerErrored => {
                     self.status_message = String::from("Chaser Error");
-                    self.status_icon = StatusIcon::error();
+                    self.status_image.set_state(IconState::Error)
                 }
             },
             Message::AutoLaunchHoudini(value) => {
@@ -187,39 +194,18 @@ impl Application for App {
         } else {("Start Chasing", Message::StartChaser)};
 
         let spacer = iced::widget::Space::with_height(80);
-        let icon_file = match self.status_icon {
-            StatusIcon::Normal(f) => f,
-            StatusIcon::Warning(f) => f,
-            StatusIcon::Error(f) => f,
-        };
         let launch_houdini_chb = checkbox("Auto-Launch Houdini",
                                           self.auto_launch_houdini,
                                           Message::AutoLaunchHoudini).size(20).spacing(5);
         let num_license_text = {
             text(format!("Core Licenses Count: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
         };
-        let icon_widget = {
-            let mut img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
-            let width = img.width();
-            let height = img.height();
-            let img_bytes = if self.chaser_subscribe {
-                image::imageops::colorops::huerotate(&img, (self.frame * 2) as i32).to_vec()
-            } else {
-                for (x, y, pixel) in img.to_luma_alpha8().enumerate_pixels() {
-                    let luma = pixel[0];
-                    let alpha = pixel[1];
-                    img.put_pixel(x, y, Rgba([luma, luma, luma, alpha]));
-                }
-                img.into_bytes()
-            };
-            image_widget(Handle::from_pixels(width, height, img_bytes)).width(70)
-        };
         let content = column![
             row![button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
                 .width(Length::Fill)
                 ].align_items(Alignment::Center).width(180),
-            icon_widget,
+            self.status_image.view(),
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
             launch_houdini_chb.width(180),
