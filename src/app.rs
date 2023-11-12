@@ -17,15 +17,6 @@ const DETACHED_PROCESS: u32 = 0x00000008;
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
 
-macro_rules! cfg_windows {
-    ($($item:item)*) => {
-        $(
-            #[cfg(any(all(doc, docsrs), windows))]
-            #[cfg_attr(docsrs, doc(cfg(windows)))]
-            $item
-        )*
-    }
-}
 #[derive(Debug, Clone)]
 enum StatusIcon {
     Normal(&'static [u8]),

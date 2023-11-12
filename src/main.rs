@@ -6,9 +6,10 @@ mod chaser;
 mod config;
 mod request;
 mod response;
+mod widgets;
 
 const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye2.png"));
-// const ICON_WARN: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/warn.png"));
+const ICON_WARN: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/warn.png"));
 
 use crate::config::{AppCache, UserConfig};
 use anyhow::{Context, Result};
