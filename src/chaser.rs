@@ -58,7 +58,10 @@ pub fn subscribe() -> subscription::Subscription<Message> {
                             HashMap::from([("show_licenses".to_string(), true)]),
                         );
                         let mut params = HashMap::new();
-                        params.insert(String::from("json"), serde_json::to_string(&keys).unwrap());
+                        params.insert(
+                            String::from("json"),
+                            serde_json::to_string(&keys).expect("Keys should be valid JSON"),
+                        );
                         params
                     });
                     let request = client
@@ -102,64 +105,3 @@ pub fn subscribe() -> subscription::Subscription<Message> {
         },
     )
 }
-
-// fn main2() -> Result<()> {
-//     let (mut ctrc_tx, ctrlc_rx) = mpsc::channel(100);
-//     ctrlc::set_handler(move || {
-//         eprintln!("Sending Ctrl-C");
-//         let _ = ctrc_tx.send(());
-//     });
-//
-//     let (mut tx, rx) = mpsc::channel(100);
-//     std::thread::spawn(move || {
-//         let client = reqwest::blocking::Client::builder().build().unwrap();
-//
-//         let keys = Keys(
-//             "cmd_ls".to_string(),
-//             vec![],
-//             HashMap::from([("show_licenses".to_string(), true)]),
-//         );
-//         let mut params = HashMap::new();
-//         params.insert("json", serde_json::to_string(&keys).unwrap());
-//         'outer: loop {
-//             let _now = std::time::Instant::now();
-//             let then = _now.add(std::time::Duration::from_secs(3));
-//             while std::time::Instant::now() < then {
-//                 if let Ok(_) = ctrlc_rx.try_recv() {
-//                     break 'outer;
-//                 }
-//             }
-//             eprintln!("Sending server request");
-//             let response = client
-//                 .post(API_ENDPOINT)
-//                 .header(
-//                     CONTENT_TYPE,
-//                     HeaderValue::from_static("application/x-www-urlencoded"),
-//                 )
-//                 .form(&params);
-//             match response.send() {
-//                 Ok(response) => {
-//                     let response: HashMap<String, Vec<License>> = response.json().unwrap();
-//                     tx.send(response).expect("data sent");
-//                 }
-//                 Err(e) => {
-//                     eprintln!("{}", e);
-//                 }
-//             }
-//         }
-//     });
-//
-//     while let Ok(data) = rx.recv() {
-//         let licenses = &data[&String::from("licenses")];
-//         let available_core_lic = licenses
-//             .iter()
-//             .filter_map(|lic| match lic.product_id {
-//                 Product::HoudiniCore if lic.version.major == 20 => Some(lic.available),
-//                 _ => None,
-//             })
-//             .sum::<i32>();
-//         dbg!(available_core_lic);
-//     }
-//     println!("Quitting");
-//     Ok(())
-// }

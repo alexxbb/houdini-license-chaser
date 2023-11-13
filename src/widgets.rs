@@ -1,6 +1,7 @@
 use crate::app::Message;
 use iced::widget::{column, image as image_widget, image::Handle, row};
 use iced::Element;
+use image::imageops::colorops;
 
 #[derive(Debug, Clone)]
 pub enum IconState {
@@ -37,12 +38,10 @@ impl StatusImage {
                 let mut img =
                     image::load_from_memory_with_format(crate::ICON, image::ImageFormat::Png)
                         .unwrap();
-                let colored = image::imageops::colorops::huerotate(&img, (self.frame * 2) as i32);
+                let colored = colorops::huerotate(&img, (self.frame * 2) as i32);
                 Handle::from_pixels(img.width(), img.height(), colored.to_vec())
             }
-            IconState::Error => {
-                unimplemented!()
-            }
+            IconState::Error => Handle::from_memory(crate::ICON_WARN),
         };
         image_widget(image_handle).width(70).into()
     }

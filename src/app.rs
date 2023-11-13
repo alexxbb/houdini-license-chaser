@@ -8,8 +8,8 @@ use iced::widget::tooltip::Position;
 use iced::widget::{
     button, checkbox, column, container, image as image_widget, row, text, tooltip,
 };
-use iced::Point;
 use iced::{alignment::*, Alignment, Application, Command, Element, Event, Length, Subscription};
+use iced::{Color, Point};
 use std::time::Duration;
 
 use crate::widgets::{IconState, StatusImage};
@@ -177,7 +177,9 @@ impl Application for App {
                 }
                 chaser::ChaserEvent::ServerErrored => {
                     self.status_message = String::from("Chaser Error");
-                    self.status_image.set_state(IconState::Error)
+                    self.status_image.set_state(IconState::Error);
+                    self.chaser_subscribe = false;
+                    self.status_image.set_state(IconState::Error);
                 }
             },
             Message::AutoLaunchHoudini(value) => {
@@ -200,11 +202,16 @@ impl Application for App {
         let num_license_text = {
             text(format!("Core Licenses Count: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
         };
-        let content = column![
-            row![button(text(button_label).horizontal_alignment(Horizontal::Center))
+        let mut start_btn =
+            button(text(button_label).horizontal_alignment(Horizontal::Center))
                 .on_press(message)
-                .width(Length::Fill)
-                ].align_items(Alignment::Center).width(180),
+                .width(180);
+
+        if self.chaser_subscribe {
+            start_btn = start_btn.style(iced::theme::Button::Secondary);
+        }
+        let content = column![
+            start_btn,
             self.status_image.view(),
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
