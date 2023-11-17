@@ -4,8 +4,8 @@
 mod app;
 mod chaser;
 mod config;
-mod request;
 mod response;
+mod settings;
 mod widgets;
 
 const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye2.png"));

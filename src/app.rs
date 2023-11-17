@@ -1,5 +1,6 @@
 use crate::chaser;
 use crate::config::{AppCache, UserConfig};
+use crate::settings::SettingsPage;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
 use iced::mouse::{Button, Event as MouseEvent};
@@ -42,6 +43,11 @@ impl StatusIcon {
     }
 }
 
+enum Pages {
+    Main,
+    Settings(SettingsPage),
+}
+
 pub struct App {
     frame: u32,
     chaser_subscribe: bool,
@@ -52,6 +58,7 @@ pub struct App {
     status_message: String,
     auto_launch_houdini: bool,
     configs: (AppCache, UserConfig),
+    pages: Pages,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +92,7 @@ impl Application for App {
                 status_message: String::new(),
                 auto_launch_houdini: true,
                 configs: flags,
+                pages: Pages::Main,
             },
             Command::none(),
         )
@@ -189,40 +197,64 @@ impl Application for App {
         Command::none()
     }
 
-    #[rustfmt::skip]
+    // #[rustfmt::skip]
     fn view(&self) -> Element<'_, Self::Message> {
         let (button_label, message) = if self.chaser_subscribe {
             ("Stop Chasing", Message::StopChaser)
-        } else {("Start Chasing", Message::StartChaser)};
+        } else {
+            ("Start Chasing", Message::StartChaser)
+        };
 
         let spacer = iced::widget::Space::with_height(80);
-        let launch_houdini_chb = checkbox("Auto-Launch Houdini",
-                                          self.auto_launch_houdini,
-                                          Message::AutoLaunchHoudini).size(20).spacing(5);
+        let launch_houdini_chb = checkbox(
+            "Auto-Launch Houdini",
+            self.auto_launch_houdini,
+            Message::AutoLaunchHoudini,
+        )
+        .size(20)
+        .spacing(5);
         let num_license_text = {
-            text(format!("Core Licenses Count: {}", self.num_core_lic.map(|v| v.to_string()).unwrap_or("---".to_string()))).width(180)
+            text(format!(
+                "Core Licenses Count: {}",
+                self.num_core_lic
+                    .map(|v| v.to_string())
+                    .unwrap_or("---".to_string())
+            ))
+            .width(180)
         };
-        let mut start_btn =
-            button(text(button_label).horizontal_alignment(Horizontal::Center))
-                .on_press(message)
-                .width(180);
+        let mut start_btn = button(text(button_label).horizontal_alignment(Horizontal::Center))
+            .on_press(message)
+            .width(180);
 
         if self.chaser_subscribe {
             start_btn = start_btn.style(iced::theme::Button::Secondary);
         }
+
+        let bottom_row = row![button(
+            text("Exit")
+                .horizontal_alignment(Horizontal::Center)
+                .line_height(LineHeight::Relative(1.2))
+        )
+        .on_press(Message::ExitApp)
+        .width(Length::Fill)]
+        .align_items(Alignment::Center)
+        .width(180);
         let content = column![
             start_btn,
             self.status_image.view(),
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
             launch_houdini_chb.width(180),
-            row![button(text("Exit").horizontal_alignment(Horizontal::Center).line_height(LineHeight::Relative(1.2)))
-            .on_press(Message::ExitApp)
-                .width(Length::Fill)
-            ].align_items(Alignment::Center).width(180)
-        ].spacing(10).align_items(Alignment::Center);
+            bottom_row,
+        ]
+        .spacing(10)
+        .align_items(Alignment::Center);
 
-        container(content).width(Length::Fill).height(Length::Fill).center_x().center_y()
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .center_y()
             .into()
     }
 
