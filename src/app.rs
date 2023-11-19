@@ -9,7 +9,10 @@ use iced::widget::tooltip::Position;
 use iced::widget::{
     button, checkbox, column, container, image as image_widget, row, text, tooltip,
 };
-use iced::{alignment::*, Alignment, Application, Command, Element, Event, Length, Subscription};
+use iced::{
+    alignment::*, theme, Alignment, Application, Command, Element, Event, Font, Length,
+    Subscription,
+};
 use iced::{Color, Point};
 use std::time::Duration;
 
@@ -230,13 +233,16 @@ impl Application for App {
             start_btn = start_btn.style(iced::theme::Button::Secondary);
         }
 
-        let bottom_row = row![button(
-            text("Exit")
-                .horizontal_alignment(Horizontal::Center)
-                .line_height(LineHeight::Relative(1.2))
-        )
-        .on_press(Message::ExitApp)
-        .width(Length::Fill)]
+        let bottom_row = row![
+            action(new_icon(), "Text", None),
+            button(
+                text("Exit")
+                    .horizontal_alignment(Horizontal::Center)
+                    .line_height(LineHeight::Relative(1.2))
+            )
+            .on_press(Message::ExitApp)
+            .width(Length::Fill)
+        ]
         .align_items(Alignment::Center)
         .width(180);
         let content = column![
@@ -291,4 +297,35 @@ impl Application for App {
 enum SubState {
     Starting,
     Ready,
+}
+
+fn action<'a, Message: Clone + 'a>(
+    content: impl Into<Element<'a, Message>>,
+    label: &'a str,
+    on_press: Option<Message>,
+) -> Element<'a, Message> {
+    let action = button(container(content).width(30).center_x());
+
+    if let Some(on_press) = on_press {
+        tooltip(
+            action.on_press(on_press),
+            label,
+            tooltip::Position::FollowCursor,
+        )
+        .style(theme::Container::Box)
+        .into()
+    } else {
+        action.style(theme::Button::Secondary).into()
+    }
+}
+
+fn new_icon<'a, Message>() -> Element<'a, Message> {
+    // U+1F6E0
+    icon('\u{1F6E0}')
+}
+
+fn icon<'a, Message>(codepoint: char) -> Element<'a, Message> {
+    const ICON_FONT: Font = Font::with_name("editor-icons");
+
+    text(codepoint).font(ICON_FONT).into()
 }
