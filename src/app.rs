@@ -1,6 +1,7 @@
 use crate::chaser;
 use crate::config::{AppCache, UserConfig};
-use crate::settings::SettingsPage;
+use crate::pages::{ErrorPage, SettingsPage};
+use anyhow::Result;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
 use iced::mouse::{Button, Event as MouseEvent};
@@ -10,7 +11,7 @@ use iced::widget::{
     button, checkbox, column, container, image as image_widget, row, text, tooltip,
 };
 use iced::{
-    alignment::*, theme, Alignment, Application, Command, Element, Event, Font, Length,
+    alignment::*, theme, Alignment, Application, Command, Element, Event, Font, Length, Size,
     Subscription,
 };
 use iced::{Color, Point};
@@ -19,10 +20,12 @@ use std::time::Duration;
 use crate::widgets::{IconState, StatusImage};
 
 const DETACHED_PROCESS: u32 = 0x00000008;
+const WIN_SIZE: Size<u32> = Size::new(200u32, 250u32);
 
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
 
+use crate::ICON;
 #[derive(Debug, Clone)]
 enum StatusIcon {
     Normal(&'static [u8]),
@@ -30,7 +33,19 @@ enum StatusIcon {
     Error(&'static [u8]),
 }
 
-use crate::ICON;
+struct PageIndex;
+#[allow(non_upper_case_globals)]
+impl PageIndex {
+    const Main: usize = 0;
+    const Settings: usize = 1;
+}
+
+pub struct App {
+    main_page: MainPage,
+    settings_page: SettingsPage,
+    error_page: ErrorPage,
+    current: PageType,
+}
 
 impl StatusIcon {
     fn normal() -> Self {
@@ -46,12 +61,18 @@ impl StatusIcon {
     }
 }
 
-enum Pages {
+#[derive(Debug, Clone, Copy)]
+pub enum PageType {
     Main,
+    Settings,
+}
+
+enum Page {
+    Main(MainPage),
     Settings(SettingsPage),
 }
 
-pub struct App {
+pub struct MainPage {
     frame: u32,
     chaser_subscribe: bool,
     chaser_running: bool,
@@ -60,62 +81,27 @@ pub struct App {
     status_image: StatusImage,
     status_message: String,
     auto_launch_houdini: bool,
-    configs: (AppCache, UserConfig),
-    pages: Pages,
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    StartChaser,
-    StopChaser,
-    ChaserEvent(chaser::ChaserEvent),
-    ExitApp,
-    Tick,
-    MouseMoved(Point),
-    WindowMoved(i32, i32),
-    AutoLaunchHoudini(bool),
-    HoudiniLaunched(bool),
-}
-
-impl Application for App {
-    type Executor = iced::executor::Default;
-    type Message = Message;
-    type Theme = iced::theme::Theme;
-    type Flags = (AppCache, UserConfig);
-
-    fn new(flags: Self::Flags) -> (Self, Command<Message>) {
-        (
-            Self {
-                chaser_subscribe: false,
-                chaser_running: false,
-                chaser_num_pings: 0,
-                num_core_lic: None,
-                frame: 1,
-                status_image: StatusImage::new(),
-                status_message: String::new(),
-                auto_launch_houdini: true,
-                configs: flags,
-                pages: Pages::Main,
-            },
-            Command::none(),
-        )
+impl MainPage {
+    fn new() -> Self {
+        Self {
+            chaser_subscribe: false,
+            chaser_running: false,
+            chaser_num_pings: 0,
+            num_core_lic: None,
+            frame: 1,
+            status_image: StatusImage::new(),
+            status_message: String::new(),
+            auto_launch_houdini: true,
+        }
     }
 
-    fn title(&self) -> String {
-        "Houdini License Chaser".to_string()
-    }
-
-    fn update(&mut self, message: Self::Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Tick => {
                 self.frame = self.frame.wrapping_add(1);
                 self.status_image.set_frame(self.frame);
-            }
-            Message::MouseMoved(_point) => {
-                // return iced::window::drag()
-            }
-            Message::WindowMoved(x, y) => {
-                self.configs.0.window_position = [x, y];
             }
             Message::HoudiniLaunched(launched) => match launched {
                 true => {
@@ -127,7 +113,7 @@ impl Application for App {
                 }
             },
             Message::ExitApp => {
-                let _ = self.configs.0.save();
+                // let _ = self.configs.0.save();
                 return iced::window::close();
             }
             Message::StartChaser => {
@@ -196,12 +182,12 @@ impl Application for App {
             Message::AutoLaunchHoudini(value) => {
                 self.auto_launch_houdini = value;
             }
+            _ => {}
         }
-        Command::none()
+        todo!()
     }
 
-    // #[rustfmt::skip]
-    fn view(&self) -> Element<'_, Self::Message> {
+    fn view(&self) -> Element<'_, Message> {
         let (button_label, message) = if self.chaser_subscribe {
             ("Stop Chasing", Message::StopChaser)
         } else {
@@ -234,7 +220,11 @@ impl Application for App {
         }
 
         let bottom_row = row![
-            action(new_icon(), "Text", None),
+            action(
+                new_icon(),
+                "Text",
+                Some(Message::SwitchPage(PageType::Settings))
+            ),
             button(
                 text("Exit")
                     .horizontal_alignment(Horizontal::Center)
@@ -244,6 +234,7 @@ impl Application for App {
             .width(Length::Fill)
         ]
         .align_items(Alignment::Center)
+        .spacing(10)
         .width(180);
         let content = column![
             start_btn,
@@ -263,12 +254,7 @@ impl Application for App {
             .center_y()
             .into()
     }
-
-    fn theme(&self) -> iced::Theme {
-        iced::Theme::Light
-    }
-
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(&self) -> Subscription<Message> {
         Subscription::batch(vec![
             if self.chaser_subscribe {
                 Subscription::batch(vec![
@@ -278,7 +264,7 @@ impl Application for App {
             } else {
                 Subscription::none()
             },
-            iced::subscription::events_with(|event, status| match event {
+            iced::event::listen_with(|event, status| match event {
                 Event::Keyboard(KeyBoardEvent::KeyPressed {
                     key_code: KeyCode::Escape,
                     ..
@@ -290,6 +276,85 @@ impl Application for App {
                 e => None,
             }),
         ])
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    StartChaser,
+    StopChaser,
+    ChaserEvent(chaser::ChaserEvent),
+    ExitApp,
+    Tick,
+    MouseMoved(Point),
+    WindowMoved(i32, i32),
+    AutoLaunchHoudini(bool),
+    HoudiniLaunched(bool),
+    SwitchPage(PageType),
+}
+
+impl Application for App {
+    type Executor = iced::executor::Default;
+    type Message = Message;
+    type Theme = iced::theme::Theme;
+    type Flags = ();
+
+    fn new(flags: Self::Flags) -> (Self, Command<Message>) {
+        // let app_cache = AppCache::load()?;
+        //
+        // let user_config = UserConfig::load().ok();
+        let app = App {
+            main_page: MainPage::new(),
+            settings_page: SettingsPage::new(),
+            error_page: ErrorPage::new(),
+            current: PageType::Main,
+        };
+
+        (app, Command::none())
+    }
+
+    fn title(&self) -> String {
+        "Houdini License Chaser".to_string()
+    }
+
+    fn update(&mut self, message: Self::Message) -> Command<Message> {
+        match message {
+            Message::MouseMoved(_point) => {
+                // return iced::window::drag()
+                Command::none()
+            }
+            Message::WindowMoved(x, y) => {
+                // TODO
+                // self.configs.0.window_position = [x, y];
+                Command::none()
+            }
+            Message::SwitchPage(page) => {
+                self.current = page;
+                Command::none()
+            }
+            other => match &mut self.current {
+                PageType::Main => self.main_page.update(other),
+                PageType::Settings => self.settings_page.update(other),
+            },
+        }
+    }
+
+    fn view(&self) -> Element<'_, Self::Message> {
+        match &self.current {
+            PageType::Main => self.main_page.view(),
+            PageType::Settings => self.settings_page.view(),
+        }
+    }
+
+    fn theme(&self) -> iced::Theme {
+        iced::Theme::Light
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        match &self.current {
+            PageType::Main => self.main_page.subscription(),
+            PageType::Settings => self.settings_page.subscription(),
+        }
     }
 }
 
@@ -321,11 +386,11 @@ fn action<'a, Message: Clone + 'a>(
 
 fn new_icon<'a, Message>() -> Element<'a, Message> {
     // U+1F6E0
-    icon('\u{1F6E0}')
+    icon('\u{e994}')
 }
 
 fn icon<'a, Message>(codepoint: char) -> Element<'a, Message> {
-    const ICON_FONT: Font = Font::with_name("editor-icons");
+    const ICON_FONT: Font = Font::with_name("icomoon");
 
-    text(codepoint).font(ICON_FONT).into()
+    text(codepoint).font(ICON_FONT).size(18).into()
 }
