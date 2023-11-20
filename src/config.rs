@@ -59,7 +59,7 @@ impl AppCache {
             .map(|path| path.join(APP_NAME).join(AppCache::CACHE_FILE))
     }
     pub fn load() -> Result<AppCache> {
-        load_config_file(&AppCache::cache_file()?).or(Ok(AppCache::default()))
+        load_config_file(&AppCache::cache_file()?)
     }
 
     pub fn save(&self) -> Result<()> {

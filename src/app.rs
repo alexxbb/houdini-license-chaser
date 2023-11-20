@@ -20,7 +20,6 @@ use std::time::Duration;
 use crate::widgets::{IconState, StatusImage};
 
 const DETACHED_PROCESS: u32 = 0x00000008;
-const WIN_SIZE: Size<u32> = Size::new(200u32, 250u32);
 
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
@@ -45,6 +44,8 @@ pub struct App {
     settings_page: SettingsPage,
     error_page: ErrorPage,
     current: PageType,
+    config: UserConfig,
+    cache: AppCache,
 }
 
 impl StatusIcon {
@@ -65,6 +66,7 @@ impl StatusIcon {
 pub enum PageType {
     Main,
     Settings,
+    Error,
 }
 
 enum Page {
@@ -74,6 +76,7 @@ enum Page {
 
 pub struct MainPage {
     frame: u32,
+    size: Size<u32>,
     chaser_subscribe: bool,
     chaser_running: bool,
     chaser_num_pings: u32,
@@ -86,6 +89,7 @@ pub struct MainPage {
 impl MainPage {
     fn new() -> Self {
         Self {
+            size: Size::new(200u32, 250u32),
             chaser_subscribe: false,
             chaser_running: false,
             chaser_num_pings: 0,
@@ -112,10 +116,6 @@ impl MainPage {
                     self.status_image.set_state(IconState::Error)
                 }
             },
-            Message::ExitApp => {
-                // let _ = self.configs.0.save();
-                return iced::window::close();
-            }
             Message::StartChaser => {
                 self.chaser_subscribe = true;
                 self.status_image.set_state(IconState::Working)
@@ -255,27 +255,14 @@ impl MainPage {
             .into()
     }
     fn subscription(&self) -> Subscription<Message> {
-        Subscription::batch(vec![
-            if self.chaser_subscribe {
-                Subscription::batch(vec![
-                    iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
-                    chaser::subscribe(),
-                ])
-            } else {
-                Subscription::none()
-            },
-            iced::event::listen_with(|event, status| match event {
-                Event::Keyboard(KeyBoardEvent::KeyPressed {
-                    key_code: KeyCode::Escape,
-                    ..
-                }) => Some(Message::ExitApp),
-                Event::Window(e) => match e {
-                    iced::window::Event::Moved { x, y } => Some(Message::WindowMoved(x, y)),
-                    _ => None,
-                },
-                e => None,
-            }),
-        ])
+        Subscription::batch(vec![if self.chaser_subscribe {
+            Subscription::batch(vec![
+                iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
+                chaser::subscribe(),
+            ])
+        } else {
+            Subscription::none()
+        }])
     }
 }
 
@@ -300,17 +287,28 @@ impl Application for App {
     type Flags = ();
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
-        // let app_cache = AppCache::load()?;
-        //
-        // let user_config = UserConfig::load().ok();
+        let mut commands = vec![];
+        let cache = AppCache::load().unwrap_or_default();
+        let [x, y] = cache.window_position;
+        commands.push(iced::window::move_to(x, y));
+        let config = UserConfig::load();
+        let mut current_page = PageType::Main;
+        let mut error_page = ErrorPage::new();
+        if let Err(e) = &config {
+            current_page = PageType::Error;
+            error_page.error_message = e.to_string();
+            commands.push(iced::window::resize(error_page.size));
+        }
+
         let app = App {
             main_page: MainPage::new(),
             settings_page: SettingsPage::new(),
-            error_page: ErrorPage::new(),
-            current: PageType::Main,
+            error_page,
+            current: current_page,
+            config: config.unwrap_or_default(),
+            cache,
         };
-
-        (app, Command::none())
+        (app, Command::batch(commands))
     }
 
     fn title(&self) -> String {
@@ -319,22 +317,28 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::MouseMoved(_point) => {
-                // return iced::window::drag()
+            Message::MouseMoved(_point) => Command::none(),
+            Message::WindowMoved(x, y) => {
+                self.cache.window_position = [x, y];
                 Command::none()
             }
-            Message::WindowMoved(x, y) => {
-                // TODO
-                // self.configs.0.window_position = [x, y];
-                Command::none()
+            Message::ExitApp => {
+                let _ = self.cache.save();
+                return iced::window::close();
             }
             Message::SwitchPage(page) => {
                 self.current = page;
-                Command::none()
+                let window_size = match page {
+                    PageType::Main => self.main_page.size,
+                    PageType::Settings => self.settings_page.size,
+                    PageType::Error => self.error_page.size,
+                };
+                iced::window::resize(window_size)
             }
             other => match &mut self.current {
                 PageType::Main => self.main_page.update(other),
                 PageType::Settings => self.settings_page.update(other),
+                PageType::Error => self.error_page.update(other),
             },
         }
     }
@@ -343,6 +347,7 @@ impl Application for App {
         match &self.current {
             PageType::Main => self.main_page.view(),
             PageType::Settings => self.settings_page.view(),
+            PageType::Error => self.error_page.view(),
         }
     }
 
@@ -351,17 +356,26 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        match &self.current {
-            PageType::Main => self.main_page.subscription(),
-            PageType::Settings => self.settings_page.subscription(),
-        }
+        Subscription::batch([
+            match &self.current {
+                PageType::Main => self.main_page.subscription(),
+                PageType::Settings => self.settings_page.subscription(),
+                PageType::Error => self.error_page.subscription(),
+            },
+            iced::event::listen_with(|event, status| match event {
+                Event::Keyboard(KeyBoardEvent::KeyPressed {
+                    key_code: KeyCode::Escape,
+                    ..
+                }) => Some(Message::ExitApp),
+                Event::Window(e) => match e {
+                    iced::window::Event::Moved { x, y } => Some(Message::WindowMoved(x, y)),
+                    iced::window::Event::CloseRequested => Some(Message::ExitApp),
+                    _ => None,
+                },
+                e => None,
+            }),
+        ])
     }
-}
-
-#[derive(Debug, Clone)]
-enum SubState {
-    Starting,
-    Ready,
 }
 
 fn action<'a, Message: Clone + 'a>(
@@ -385,7 +399,6 @@ fn action<'a, Message: Clone + 'a>(
 }
 
 fn new_icon<'a, Message>() -> Element<'a, Message> {
-    // U+1F6E0
     icon('\u{e994}')
 }
 

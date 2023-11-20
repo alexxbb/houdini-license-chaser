@@ -11,7 +11,7 @@ pub struct SettingsPage {
 impl SettingsPage {
     pub fn new() -> Self {
         SettingsPage {
-            size: Size::new(300, 450),
+            size: Size::new(450, 300),
         }
     }
     pub fn view(&self) -> Element<'_, Message> {

@@ -1,7 +1,7 @@
 use crate::app::Message;
-use iced::alignment::{Horizontal, Vertical};
+use iced::alignment::{Alignment, Horizontal, Vertical};
 use iced::widget::{button, column, container, row, text};
-use iced::{Element, Length, Size};
+use iced::{Command, Element, Length, Size, Subscription};
 
 #[derive(Debug, Clone)]
 pub struct ErrorPage {
@@ -12,14 +12,28 @@ pub struct ErrorPage {
 impl ErrorPage {
     pub fn new() -> Self {
         ErrorPage {
-            size: Size::new(300, 450),
+            size: Size::new(450, 250),
             error_message: "Error Page".to_owned(),
         }
     }
 
+    pub fn update(&mut self, message: Message) -> Command<Message> {
+        Command::none()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        Subscription::none()
+    }
+
+    #[rustfmt::skip]
     pub fn view(&self) -> Element<'_, Message> {
-        let btn = button("Close").on_press(Message::SwitchPage(crate::app::PageType::Main));
-        let content = column![text(&self.error_message).width(Length::Fill), btn];
+        let btn = button("Close").on_press(Message::ExitApp);
+        let content = column![
+            row![
+                text(&self.error_message).width(Length::Fill)
+            ].align_items(Alignment::Center).spacing(10),
+            row![btn].align_items(Alignment::End)
+        ];
         container(content)
             .width(Length::Fill)
             .align_x(Horizontal::Center)
