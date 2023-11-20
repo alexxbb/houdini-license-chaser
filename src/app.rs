@@ -16,6 +16,7 @@ use iced::{
 };
 use iced::{Color, Point};
 use std::fmt::Write;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::widgets::{IconState, StatusImage};
@@ -100,7 +101,7 @@ impl MainPage {
         }
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message, config: &UserConfig) -> Command<Message> {
         match message {
             Message::Tick => {
                 self.frame = self.frame.wrapping_add(1);
@@ -143,8 +144,7 @@ impl MainPage {
                     self.num_core_lic = Some(available_core_lic);
 
                     if self.auto_launch_houdini && available_core_lic > 0 {
-                        let hfs = std::env::var("HFS").expect("TODO");
-                        let hbin = std::path::Path::new(&hfs).join("bin").join("houdinicore");
+                        let hbin = config.houdini_executable();
                         self.chaser_subscribe = false;
                         self.chaser_running = false;
                         self.status_image.set_state(IconState::Idle);
@@ -183,7 +183,7 @@ impl MainPage {
             }
             _ => {}
         }
-        todo!()
+        Command::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -253,11 +253,12 @@ impl MainPage {
             .center_y()
             .into()
     }
-    fn subscription(&self) -> Subscription<Message> {
+    fn subscription(&self, config: &UserConfig) -> Subscription<Message> {
         Subscription::batch(vec![if self.chaser_subscribe {
+            let server_url: Arc<str> = Arc::from(config.server_url.as_str());
             Subscription::batch(vec![
                 iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
-                chaser::subscribe(),
+                chaser::subscribe(server_url),
             ])
         } else {
             Subscription::none()
@@ -299,7 +300,7 @@ impl Application for App {
             Ok(config) => {
                 if !config.hfs.exists() {
                     current_page = PageType::Settings;
-                    error_message.write_str("Error: HFS invalid");
+                    error_message.write_str("Error: invalid HFS");
                     commands.push(iced::window::resize(ErrorPage::SIZE));
                 }
                 config
@@ -314,6 +315,7 @@ impl Application for App {
                         current_page = PageType::Error;
                         commands.push(iced::window::resize(ErrorPage::SIZE));
                         error_page.title = "Error Loading Config File".to_owned();
+                        error_page.footer = "Tip: delete the config file and try again".to_owned();
                         error_page.body = e.to_string();
                     }
                 }
@@ -355,6 +357,10 @@ impl Application for App {
             Message::Settings(settings_message) => match settings_message {
                 SettingsMessage::OkPressed => {
                     if self.settings_page.check_input() {
+                        if let Err(e) = self.settings_page.config.save() {
+                            // TODO
+                            eprintln!("Could not save config");
+                        }
                         self.current = PageType::Main;
                         iced::window::resize(MainPage::SIZE)
                     } else {
@@ -376,7 +382,9 @@ impl Application for App {
                 iced::window::resize(window_size)
             }
             other => match &mut self.current {
-                PageType::Main => self.main_page.update(other.clone()),
+                PageType::Main => self
+                    .main_page
+                    .update(other.clone(), &self.settings_page.config),
                 PageType::Settings => self.settings_page.update(other.clone()),
                 PageType::Error => self.error_page.update(other.clone()),
             },
@@ -398,7 +406,7 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch([
             match &self.current {
-                PageType::Main => self.main_page.subscription(),
+                PageType::Main => self.main_page.subscription(&self.settings_page.config),
                 PageType::Settings => self.settings_page.subscription(),
                 PageType::Error => self.error_page.subscription(),
             },

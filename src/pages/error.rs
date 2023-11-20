@@ -7,6 +7,7 @@ use iced::{Command, Element, Length, Size, Subscription};
 pub struct ErrorPage {
     pub title: String,
     pub body: String,
+    pub footer: String,
 }
 
 impl ErrorPage {
@@ -15,6 +16,7 @@ impl ErrorPage {
         ErrorPage {
             title: "Error".to_owned(),
             body: "------".to_owned(),
+            footer: "------".to_owned(),
         }
     }
 
@@ -38,6 +40,12 @@ impl ErrorPage {
 
             row![
                 text(&self.body).width(Length::Fill)
+            ].align_items(Alignment::Center).spacing(10).width(Length::Fill),
+
+            Space::with_height(10),
+
+            row![
+                text(&self.footer).width(Length::Fill)
             ].align_items(Alignment::Center).spacing(10).width(Length::Fill),
 
             Space::with_height(Length::Fill),

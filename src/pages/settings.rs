@@ -14,6 +14,7 @@ pub struct SettingsPage {
 pub enum SettingsMessage {
     OkPressed,
     HFSChanged(String),
+    LicServerChanged(String),
 }
 
 impl SettingsPage {
@@ -27,8 +28,12 @@ impl SettingsPage {
     }
 
     pub fn check_input(&mut self) -> bool {
-        if !self.config.hfs.exists() {
+        if !self.config.hfs.join("bin").exists() {
             self.error = "Error: Incorrect HFS path".to_owned();
+            return false;
+        }
+        if self.config.server_url.is_empty() {
+            self.error = "Error: Empty URL".to_owned();
             return false;
         }
         true
@@ -63,6 +68,16 @@ impl SettingsPage {
                 .spacing(10)
                 .width(Length::Fill),
 
+            row![
+                text("URL:"),
+                text_input("License server URL", &self.config.server_url)
+                    .width(Length::Fill)
+                    .on_input(|input|Message::Settings(SettingsMessage::LicServerChanged(input)))
+            ]
+                .align_items(Alignment::Center)
+                .spacing(10)
+                .width(Length::Fill),
+
             text(&self.error).style(Color::from_rgb(0.9, 0.1, 0.0)),
 
             Space::with_height(Length::Fill),
@@ -84,6 +99,9 @@ impl SettingsPage {
             Message::Settings(msg) => match msg {
                 SettingsMessage::HFSChanged(value) => {
                     self.config.hfs = std::path::PathBuf::from(value);
+                }
+                SettingsMessage::LicServerChanged(value) => {
+                    self.config.server_url = value;
                 }
                 _ => {}
             },

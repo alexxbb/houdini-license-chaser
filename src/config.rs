@@ -32,6 +32,7 @@ pub fn save_config_file<T: Serialize>(value: T, path: impl AsRef<Path>) -> Resul
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfig {
     pub hfs: PathBuf,
+    pub server_url: String,
 }
 
 impl UserConfig {
@@ -51,6 +52,10 @@ impl UserConfig {
 
     pub fn save(&self) -> Result<()> {
         save_config_file(self, UserConfig::config_file()?)
+    }
+
+    pub fn houdini_executable(&self) -> PathBuf {
+        self.hfs.join("bin").join("houdinicore")
     }
 }
 
