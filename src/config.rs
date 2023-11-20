@@ -1,25 +1,34 @@
-use anyhow::Result;
-use anyhow::{Context, Error};
+// use anyhow::Result;
+// use anyhow::{Context, Error};
 use iced::futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter, Write};
 use std::path::{Path, PathBuf};
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 const APP_NAME: &'static str = "houdini.license.chaser";
 
 pub fn load_config_file<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
-    let reader = std::fs::File::open(&path)
-        .context(format!("Could not open file: {}", path.to_string_lossy()))?;
-    serde_json::from_reader(reader).context(format!("Error loading {}", path.to_string_lossy()))
+    use std::io::ErrorKind;
+
+    match std::fs::File::open(&path) {
+        Ok(file) => serde_json::from_reader(file).map_err(ConfigError::ParseError),
+        Err(e) => match e.kind() {
+            ErrorKind::NotFound => Err(ConfigError::Missing),
+            _ => Err(e.into()),
+        },
+    }
 }
 
 pub fn save_config_file<T: Serialize>(value: T, path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     let parent = path.parent().unwrap();
     if !parent.exists() {
-        std::fs::create_dir_all(parent).context("Could not create app cache dir")?;
+        std::fs::create_dir_all(parent)?;
     }
-    let mut file = std::fs::File::create(path).context("Could not create app cache file")?;
-    serde_json::to_writer_pretty(file, &value).context("Could not serialize cache")?;
+    let mut file = std::fs::File::create(path)?;
+    serde_json::to_writer_pretty(file, &value)?;
     Ok(())
 }
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
@@ -32,7 +41,9 @@ impl UserConfig {
 
     fn config_file() -> Result<PathBuf> {
         dirs::config_dir()
-            .ok_or(Error::msg("Platform config directory not found"))
+            .ok_or(ConfigError::Other(
+                "Platform config directory not found".to_owned(),
+            ))
             .map(|path| path.join(APP_NAME).join(UserConfig::CONFIG_FILE))
     }
 
@@ -42,6 +53,39 @@ impl UserConfig {
 
     pub fn save(&self) -> Result<()> {
         save_config_file(self, UserConfig::config_file()?)
+    }
+}
+
+#[derive(Debug)]
+pub enum ConfigError {
+    Missing,
+    Io(std::io::Error),
+    ParseError(serde_json::Error),
+    Other(String),
+}
+
+impl Display for ConfigError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigError::Other(s) => f.write_str(s),
+            ConfigError::Missing => f.write_str("Config file is missing"),
+            ConfigError::ParseError(e) => f.write_fmt(format_args!("Could not load config: {}", e)),
+            ConfigError::Io(e) => f.write_fmt(format_args!("IO Error: {}", e)),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+impl From<serde_json::Error> for ConfigError {
+    fn from(value: serde_json::Error) -> Self {
+        ConfigError::ParseError(value)
+    }
+}
+
+impl From<std::io::Error> for ConfigError {
+    fn from(value: std::io::Error) -> Self {
+        ConfigError::Io(value)
     }
 }
 
@@ -55,7 +99,9 @@ impl AppCache {
 
     fn cache_file() -> Result<PathBuf> {
         dirs::cache_dir()
-            .ok_or(Error::msg("Platform cache directory not found"))
+            .ok_or(ConfigError::Other(
+                "Platform cache directory not found".to_owned(),
+            ))
             .map(|path| path.join(APP_NAME).join(AppCache::CACHE_FILE))
     }
     pub fn load() -> Result<AppCache> {

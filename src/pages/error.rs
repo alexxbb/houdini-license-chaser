@@ -1,19 +1,21 @@
 use crate::app::Message;
 use iced::alignment::{Alignment, Horizontal, Vertical};
-use iced::widget::{button, column, container, row, text};
+use iced::widget::{button, column, container, row, text, Space};
 use iced::{Command, Element, Length, Size, Subscription};
 
 #[derive(Debug, Clone)]
 pub struct ErrorPage {
     pub size: Size<u32>,
-    pub error_message: String,
+    pub title: String,
+    pub body: String,
 }
 
 impl ErrorPage {
     pub fn new() -> Self {
         ErrorPage {
-            size: Size::new(450, 250),
-            error_message: "Error Page".to_owned(),
+            size: Size::new(550, 200),
+            title: "Error".to_owned(),
+            body: "------".to_owned(),
         }
     }
 
@@ -27,17 +29,27 @@ impl ErrorPage {
 
     #[rustfmt::skip]
     pub fn view(&self) -> Element<'_, Message> {
-        let btn = button("Close").on_press(Message::ExitApp);
+        let btn = button("Ouch, bummer!").on_press(Message::ExitApp);
         let content = column![
             row![
-                text(&self.error_message).width(Length::Fill)
-            ].align_items(Alignment::Center).spacing(10),
-            row![btn].align_items(Alignment::End)
-        ];
+                text(&self.title).width(Length::Fill).horizontal_alignment(Horizontal::Center).size(20)
+            ].align_items(Alignment::Center).width(Length::Fill),
+
+            Space::with_height(Length::Fill),
+
+            row![
+                text(&self.body).width(Length::Fill)
+            ].align_items(Alignment::Center).spacing(10).width(Length::Fill),
+
+            Space::with_height(Length::Fill),
+            row![Space::with_width(Length::Fill), btn].align_items(Alignment::Center)
+        ].align_items(Alignment::Center);
         container(content)
             .width(Length::Fill)
+            .height(Length::Fill)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center)
+            .padding(10)
             .into()
     }
 }

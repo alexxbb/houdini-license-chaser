@@ -1,5 +1,5 @@
 use crate::chaser;
-use crate::config::{AppCache, UserConfig};
+use crate::config::{AppCache, ConfigError, UserConfig};
 use crate::pages::{ErrorPage, SettingsPage};
 use anyhow::Result;
 use iced::futures::channel::mpsc;
@@ -294,18 +294,32 @@ impl Application for App {
         let config = UserConfig::load();
         let mut current_page = PageType::Main;
         let mut error_page = ErrorPage::new();
-        if let Err(e) = &config {
-            current_page = PageType::Error;
-            error_page.error_message = e.to_string();
-            commands.push(iced::window::resize(error_page.size));
-        }
+        let mut settings_page = SettingsPage::new();
+        let config = match config {
+            Ok(config) => config,
+            Err(config_error) => {
+                match config_error {
+                    ConfigError::Missing => {
+                        current_page = PageType::Settings;
+                        commands.push(iced::window::resize(settings_page.size));
+                    }
+                    e => {
+                        current_page = PageType::Error;
+                        commands.push(iced::window::resize(error_page.size));
+                        error_page.title = "Error Loading Config File".to_owned();
+                        error_page.body = e.to_string();
+                    }
+                }
+                UserConfig::default()
+            }
+        };
 
         let app = App {
             main_page: MainPage::new(),
             settings_page: SettingsPage::new(),
             error_page,
             current: current_page,
-            config: config.unwrap_or_default(),
+            config,
             cache,
         };
         (app, Command::batch(commands))
