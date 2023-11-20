@@ -1,6 +1,6 @@
 use crate::chaser;
 use crate::config::{AppCache, ConfigError, UserConfig};
-use crate::pages::{ErrorPage, SettingsPage};
+use crate::pages::{ErrorPage, SettingsMessage, SettingsPage};
 use anyhow::Result;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
@@ -15,6 +15,7 @@ use iced::{
     Subscription,
 };
 use iced::{Color, Point};
+use std::fmt::Write;
 use std::time::Duration;
 
 use crate::widgets::{IconState, StatusImage};
@@ -44,7 +45,6 @@ pub struct App {
     settings_page: SettingsPage,
     error_page: ErrorPage,
     current: PageType,
-    config: UserConfig,
     cache: AppCache,
 }
 
@@ -76,7 +76,6 @@ enum Page {
 
 pub struct MainPage {
     frame: u32,
-    size: Size<u32>,
     chaser_subscribe: bool,
     chaser_running: bool,
     chaser_num_pings: u32,
@@ -87,9 +86,9 @@ pub struct MainPage {
 }
 
 impl MainPage {
+    const SIZE: Size<u32> = Size::new(200, 250);
     fn new() -> Self {
         Self {
-            size: Size::new(200u32, 250u32),
             chaser_subscribe: false,
             chaser_running: false,
             chaser_num_pings: 0,
@@ -278,6 +277,7 @@ pub enum Message {
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
     SwitchPage(PageType),
+    Settings(SettingsMessage),
 }
 
 impl Application for App {
@@ -294,18 +294,25 @@ impl Application for App {
         let config = UserConfig::load();
         let mut current_page = PageType::Main;
         let mut error_page = ErrorPage::new();
-        let mut settings_page = SettingsPage::new();
+        let mut error_message = String::new();
         let config = match config {
-            Ok(config) => config,
+            Ok(config) => {
+                if !config.hfs.exists() {
+                    current_page = PageType::Settings;
+                    error_message.write_str("Error: HFS invalid");
+                    commands.push(iced::window::resize(ErrorPage::SIZE));
+                }
+                config
+            }
             Err(config_error) => {
                 match config_error {
                     ConfigError::Missing => {
                         current_page = PageType::Settings;
-                        commands.push(iced::window::resize(settings_page.size));
+                        commands.push(iced::window::resize(SettingsPage::SIZE));
                     }
                     e => {
                         current_page = PageType::Error;
-                        commands.push(iced::window::resize(error_page.size));
+                        commands.push(iced::window::resize(ErrorPage::SIZE));
                         error_page.title = "Error Loading Config File".to_owned();
                         error_page.body = e.to_string();
                     }
@@ -313,13 +320,14 @@ impl Application for App {
                 UserConfig::default()
             }
         };
+        let mut settings_page = SettingsPage::new(config);
+        settings_page.error = error_message;
 
         let app = App {
             main_page: MainPage::new(),
-            settings_page: SettingsPage::new(),
+            settings_page,
             error_page,
             current: current_page,
-            config,
             cache,
         };
         (app, Command::batch(commands))
@@ -330,29 +338,47 @@ impl Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
-        match message {
+        match &message {
             Message::MouseMoved(_point) => Command::none(),
             Message::WindowMoved(x, y) => {
-                self.cache.window_position = [x, y];
+                self.cache.window_position = [*x, *y];
                 Command::none()
             }
             Message::ExitApp => {
                 let _ = self.cache.save();
+                if let Err(e) = self.settings_page.config.save() {
+                    // TODO
+                    eprintln!("Could not save config");
+                }
                 return iced::window::close();
             }
+            Message::Settings(settings_message) => match settings_message {
+                SettingsMessage::OkPressed => {
+                    if self.settings_page.check_input() {
+                        self.current = PageType::Main;
+                        iced::window::resize(MainPage::SIZE)
+                    } else {
+                        Command::none()
+                    }
+                }
+                _ => self.settings_page.update(message.clone()),
+            },
             Message::SwitchPage(page) => {
-                self.current = page;
+                self.current = page.clone();
                 let window_size = match page {
-                    PageType::Main => self.main_page.size,
-                    PageType::Settings => self.settings_page.size,
-                    PageType::Error => self.error_page.size,
+                    PageType::Main => MainPage::SIZE,
+                    PageType::Settings => {
+                        self.settings_page.error.clear();
+                        SettingsPage::SIZE
+                    }
+                    PageType::Error => ErrorPage::SIZE,
                 };
                 iced::window::resize(window_size)
             }
             other => match &mut self.current {
-                PageType::Main => self.main_page.update(other),
-                PageType::Settings => self.settings_page.update(other),
-                PageType::Error => self.error_page.update(other),
+                PageType::Main => self.main_page.update(other.clone()),
+                PageType::Settings => self.settings_page.update(other.clone()),
+                PageType::Error => self.error_page.update(other.clone()),
             },
         }
     }

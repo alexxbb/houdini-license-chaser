@@ -13,15 +13,10 @@ const ICON_WARN: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/as
 
 const ICONS_TTF: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons.ttf"));
 
-use crate::config::{AppCache, UserConfig};
 use anyhow::{Context, Result};
-use iced::application::Application;
-use iced::window::Position;
-use iced::Settings;
+use iced::{Application, Settings};
 
 fn main() -> Result<()> {
-    use iced::{Sandbox, Settings};
-    let app_cache = AppCache::load()?;
     dotenv::dotenv().ok();
 
     let mut settings = Settings::<()>::default();
@@ -35,10 +30,6 @@ fn main() -> Result<()> {
     settings.window.min_size = Some((200, 250));
     settings.window.max_size = Some((200, 250));
     settings.window.resizable = false;
-    let [x, y] = app_cache.window_position;
-    settings.window.position = Position::Specific(x, y);
-    // settings.window.decorations = false;
-    settings.flags = ();
     let app = app::App::run(settings)?;
 
     Ok(())

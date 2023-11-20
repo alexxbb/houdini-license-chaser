@@ -5,15 +5,14 @@ use iced::{Command, Element, Length, Size, Subscription};
 
 #[derive(Debug, Clone)]
 pub struct ErrorPage {
-    pub size: Size<u32>,
     pub title: String,
     pub body: String,
 }
 
 impl ErrorPage {
+    pub const SIZE: Size<u32> = Size::new(550, 200);
     pub fn new() -> Self {
         ErrorPage {
-            size: Size::new(550, 200),
             title: "Error".to_owned(),
             body: "------".to_owned(),
         }
