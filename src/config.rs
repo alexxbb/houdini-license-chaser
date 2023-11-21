@@ -1,11 +1,10 @@
+use crate::app::APP_NAME;
 use iced::futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Write};
 use std::path::{Path, PathBuf};
 
 type Result<T> = std::result::Result<T, ConfigError>;
-
-const APP_NAME: &'static str = "houdini.license.chaser";
 
 pub fn load_config_file<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
     use std::io::ErrorKind;
@@ -31,14 +30,14 @@ pub fn save_config_file<T: Serialize>(value: T, path: impl AsRef<Path>) -> Resul
 }
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfig {
-    pub hfs: PathBuf,
+    pub houdini_executable: PathBuf,
     pub server_url: String,
 }
 
 impl UserConfig {
     const CONFIG_FILE: &'static str = "chaser.json";
 
-    fn config_file() -> Result<PathBuf> {
+    pub fn config_file() -> Result<PathBuf> {
         dirs::config_dir()
             .ok_or(ConfigError::Other(
                 "Platform config directory not found".to_owned(),
@@ -54,8 +53,8 @@ impl UserConfig {
         save_config_file(self, UserConfig::config_file()?)
     }
 
-    pub fn houdini_executable(&self) -> PathBuf {
-        self.hfs.join("bin").join("houdinicore")
+    pub fn is_valid(&self) -> bool {
+        !self.server_url.is_empty() && self.houdini_executable.exists()
     }
 }
 

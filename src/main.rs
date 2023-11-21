@@ -30,6 +30,7 @@ fn main() -> Result<()> {
     settings.window.min_size = Some((200, 250));
     settings.window.max_size = Some((200, 250));
     settings.window.resizable = false;
+    settings.window.decorations = true;
     let app = app::App::run(settings)?;
 
     Ok(())

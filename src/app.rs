@@ -22,6 +22,7 @@ use std::time::Duration;
 use crate::widgets::{IconState, StatusImage};
 
 const DETACHED_PROCESS: u32 = 0x00000008;
+pub(crate) const APP_NAME: &'static str = "houdini.license.chaser";
 
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
@@ -144,13 +145,13 @@ impl MainPage {
                     self.num_core_lic = Some(available_core_lic);
 
                     if self.auto_launch_houdini && available_core_lic > 0 {
-                        let hbin = config.houdini_executable();
+                        let hbin = config.houdini_executable.clone();
                         self.chaser_subscribe = false;
                         self.chaser_running = false;
                         self.status_image.set_state(IconState::Idle);
                         return Command::perform(
                             async move {
-                                let mut command = tokio::process::Command::new(&hbin);
+                                let mut command = tokio::process::Command::new(hbin);
                                 command
                                     .stdout(std::process::Stdio::null())
                                     .stderr(std::process::Stdio::null())
@@ -208,22 +209,18 @@ impl MainPage {
                     .map(|v| v.to_string())
                     .unwrap_or("---".to_string())
             ))
-            .width(180)
+            .width(Length::Fill)
         };
         let mut start_btn = button(text(button_label).horizontal_alignment(Horizontal::Center))
             .on_press(message)
-            .width(180);
+            .width(Length::Fill);
 
         if self.chaser_subscribe {
-            start_btn = start_btn.style(iced::theme::Button::Secondary);
+            start_btn = start_btn.style(theme::Button::Secondary);
         }
 
         let bottom_row = row![
-            action(
-                new_icon(),
-                "Text",
-                Some(Message::SwitchPage(PageType::Settings))
-            ),
+            action(new_icon(), Message::SwitchPage(PageType::Settings)),
             button(
                 text("Exit")
                     .horizontal_alignment(Horizontal::Center)
@@ -234,13 +231,13 @@ impl MainPage {
         ]
         .align_items(Alignment::Center)
         .spacing(10)
-        .width(180);
+        .width(Length::Fill);
         let content = column![
-            start_btn,
+            row![start_btn].align_items(Alignment::Center),
             self.status_image.view(),
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
-            launch_houdini_chb.width(180),
+            launch_houdini_chb.width(Length::Fill),
             bottom_row,
         ]
         .spacing(10)
@@ -251,6 +248,7 @@ impl MainPage {
             .height(Length::Fill)
             .center_x()
             .center_y()
+            .padding(10)
             .into()
     }
     fn subscription(&self, config: &UserConfig) -> Subscription<Message> {
@@ -298,10 +296,10 @@ impl Application for App {
         let mut error_message = String::new();
         let config = match config {
             Ok(config) => {
-                if !config.hfs.exists() {
+                if !config.is_valid() {
                     current_page = PageType::Settings;
-                    error_message.write_str("Error: invalid HFS");
-                    commands.push(iced::window::resize(ErrorPage::SIZE));
+                    error_message.write_str("Error: Check config values!");
+                    commands.push(iced::window::resize(SettingsPage::SIZE));
                 }
                 config
             }
@@ -348,10 +346,6 @@ impl Application for App {
             }
             Message::ExitApp => {
                 let _ = self.cache.save();
-                if let Err(e) = self.settings_page.config.save() {
-                    // TODO
-                    eprintln!("Could not save config");
-                }
                 return iced::window::close();
             }
             Message::Settings(settings_message) => match settings_message {
@@ -428,22 +422,20 @@ impl Application for App {
 
 fn action<'a, Message: Clone + 'a>(
     content: impl Into<Element<'a, Message>>,
-    label: &'a str,
-    on_press: Option<Message>,
+    on_press: Message,
 ) -> Element<'a, Message> {
-    let action = button(container(content).width(30).center_x());
-
-    if let Some(on_press) = on_press {
-        tooltip(
-            action.on_press(on_press),
-            label,
-            tooltip::Position::FollowCursor,
-        )
-        .style(theme::Container::Box)
+    let action = button(
+        container(content)
+            .width(25)
+            .height(Length::Fill)
+            .padding(0)
+            .center_x()
+            .center_y(),
+    );
+    action
+        .style(theme::Button::Secondary)
+        .on_press(on_press)
         .into()
-    } else {
-        action.style(theme::Button::Secondary).into()
-    }
 }
 
 fn new_icon<'a, Message>() -> Element<'a, Message> {
@@ -453,5 +445,5 @@ fn new_icon<'a, Message>() -> Element<'a, Message> {
 fn icon<'a, Message>(codepoint: char) -> Element<'a, Message> {
     const ICON_FONT: Font = Font::with_name("icomoon");
 
-    text(codepoint).font(ICON_FONT).size(18).into()
+    text(codepoint).font(ICON_FONT).size(16).into()
 }

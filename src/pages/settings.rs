@@ -13,12 +13,12 @@ pub struct SettingsPage {
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
     OkPressed,
-    HFSChanged(String),
+    ExecutableChanged(String),
     LicServerChanged(String),
 }
 
 impl SettingsPage {
-    pub const SIZE: Size<u32> = Size::new(450, 300);
+    pub const SIZE: Size<u32> = Size::new(550, 250);
 
     pub fn new(config: UserConfig) -> Self {
         SettingsPage {
@@ -28,12 +28,12 @@ impl SettingsPage {
     }
 
     pub fn check_input(&mut self) -> bool {
-        if !self.config.hfs.join("bin").exists() {
-            self.error = "Error: Incorrect HFS path".to_owned();
+        if !self.config.houdini_executable.exists() {
+            self.error = "Error: Invalid path to Houdini executable".to_owned();
             return false;
         }
         if self.config.server_url.is_empty() {
-            self.error = "Error: Empty URL".to_owned();
+            self.error = "Error: Empty license server URL".to_owned();
             return false;
         }
         true
@@ -42,6 +42,9 @@ impl SettingsPage {
     #[rustfmt::skip]
     pub fn view(&self) -> Element<'_, Message> {
         let save_button = button("Save").on_press(Message::Settings(SettingsMessage::OkPressed));
+        let config_path = UserConfig::config_file();
+        let config_path = config_path.as_deref().map(|p|p.to_string_lossy())
+            .expect("UserConfig path is valid");
         let content = column![
 
 
@@ -54,22 +57,26 @@ impl SettingsPage {
 
             Space::with_height(10),
 
-            text("TODO: Display config path").width(Length::Fill).horizontal_alignment(Horizontal::Center),
+            text(config_path).width(Length::Fill).horizontal_alignment(Horizontal::Center),
+
+            Space::with_height(10),
 
             Space::with_height(Length::Fill),
 
             row![
-                text("HFS:"),
-                text_input("Path to Houdini install", &self.config.hfs.to_string_lossy())
+                text("Houdini Executable:"),
+                text_input("Path to Houdini executable", &self.config.houdini_executable.to_string_lossy())
                     .width(Length::Fill)
-                    .on_input(|input|Message::Settings(SettingsMessage::HFSChanged(input)))
+                    .on_input(|input|Message::Settings(SettingsMessage::ExecutableChanged(input)))
             ]
                 .align_items(Alignment::Center)
                 .spacing(10)
                 .width(Length::Fill),
 
+            Space::with_height(5),
+
             row![
-                text("URL:"),
+                text("License Server URL:"),
                 text_input("License server URL", &self.config.server_url)
                     .width(Length::Fill)
                     .on_input(|input|Message::Settings(SettingsMessage::LicServerChanged(input)))
@@ -77,6 +84,7 @@ impl SettingsPage {
                 .align_items(Alignment::Center)
                 .spacing(10)
                 .width(Length::Fill),
+
 
             text(&self.error).style(Color::from_rgb(0.9, 0.1, 0.0)),
 
@@ -97,8 +105,8 @@ impl SettingsPage {
     pub fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Settings(msg) => match msg {
-                SettingsMessage::HFSChanged(value) => {
-                    self.config.hfs = std::path::PathBuf::from(value);
+                SettingsMessage::ExecutableChanged(value) => {
+                    self.config.houdini_executable = std::path::PathBuf::from(value);
                 }
                 SettingsMessage::LicServerChanged(value) => {
                     self.config.server_url = value;
