@@ -16,6 +16,8 @@ const ICONS_TTF: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/as
 use anyhow::{Context, Result};
 use iced::{Application, Settings};
 
+const WIN_SIZE: Option<(u32, u32)> = Some((app::MainPage::SIZE.width, app::MainPage::SIZE.height));
+
 fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
@@ -27,8 +29,8 @@ fn main() -> Result<()> {
     settings.fonts = vec![ICONS_TTF.into()];
     settings.default_font = iced::Font::DEFAULT;
     settings.window.level = iced::window::Level::AlwaysOnTop;
-    settings.window.min_size = Some((200, 250));
-    settings.window.max_size = Some((200, 250));
+    settings.window.min_size = WIN_SIZE;
+    settings.window.max_size = WIN_SIZE;
     settings.window.resizable = false;
     settings.window.decorations = true;
     let app = app::App::run(settings)?;

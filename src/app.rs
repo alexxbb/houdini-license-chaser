@@ -1,6 +1,7 @@
 use crate::chaser;
 use crate::config::{AppCache, ConfigError, UserConfig};
 use crate::pages::{ErrorPage, SettingsMessage, SettingsPage};
+use crate::response::Product;
 use anyhow::Result;
 use iced::futures::channel::mpsc;
 use iced::keyboard::{Event as KeyBoardEvent, KeyCode};
@@ -8,7 +9,7 @@ use iced::mouse::{Button, Event as MouseEvent};
 use iced::widget::text::LineHeight;
 use iced::widget::tooltip::Position;
 use iced::widget::{
-    button, checkbox, column, container, image as image_widget, row, text, tooltip,
+    button, checkbox, column, container, image as image_widget, radio, row, text, tooltip,
 };
 use iced::{
     alignment::*, theme, Alignment, Application, Command, Element, Event, Font, Length, Size,
@@ -21,7 +22,6 @@ use std::time::Duration;
 
 use crate::widgets::{IconState, StatusImage};
 
-const DETACHED_PROCESS: u32 = 0x00000008;
 pub(crate) const APP_NAME: &'static str = "houdini.license.chaser";
 
 use iced::widget::image::Handle;
@@ -76,6 +76,33 @@ enum Page {
     Settings(SettingsPage),
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum LicenseType {
+    Core,
+    Fx,
+    Other,
+}
+
+impl From<LicenseType> for String {
+    fn from(value: LicenseType) -> Self {
+        String::from(match value {
+            LicenseType::Core => "Core",
+            LicenseType::Fx => "Fx",
+            LicenseType::Other => "Other",
+        })
+    }
+}
+
+impl From<&Product> for LicenseType {
+    fn from(value: &Product) -> Self {
+        match value {
+            Product::HoudiniCore => LicenseType::Core,
+            Product::HoudiniFx => LicenseType::Fx,
+            _ => LicenseType::Other,
+        }
+    }
+}
+
 pub struct MainPage {
     frame: u32,
     chaser_subscribe: bool,
@@ -85,10 +112,11 @@ pub struct MainPage {
     status_image: StatusImage,
     status_message: String,
     auto_launch_houdini: bool,
+    chase_license: Option<LicenseType>,
 }
 
 impl MainPage {
-    const SIZE: Size<u32> = Size::new(200, 250);
+    pub const SIZE: Size<u32> = Size::new(200, 280);
     fn new() -> Self {
         Self {
             chaser_subscribe: false,
@@ -99,6 +127,7 @@ impl MainPage {
             status_image: StatusImage::new(),
             status_message: String::new(),
             auto_launch_houdini: true,
+            chase_license: Some(LicenseType::Core),
         }
     }
 
@@ -117,6 +146,7 @@ impl MainPage {
                     self.status_image.set_state(IconState::Error)
                 }
             },
+            Message::LicenseSelected(license) => self.chase_license = Some(license),
             Message::StartChaser => {
                 self.chaser_subscribe = true;
                 self.status_image.set_state(IconState::Working)
@@ -135,11 +165,11 @@ impl MainPage {
                     let licenses = &resp[&String::from("licenses")];
                     let available_core_lic = licenses
                         .iter()
-                        .filter_map(|lic| match lic.product_id {
-                            crate::response::Product::HoudiniCore if lic.version.major == 20 => {
-                                Some(lic.available)
-                            }
-                            _ => None,
+                        .filter_map(|lic| {
+                            let lic_type = LicenseType::from(&lic.product_id);
+                            let selected_lic = self.chase_license.expect("always some");
+                            (selected_lic == lic_type && lic.version.major == 20)
+                                .then_some(lic.available)
                         })
                         .sum::<i32>();
                     self.num_core_lic = Some(available_core_lic);
@@ -158,7 +188,7 @@ impl MainPage {
                                     .stdin(std::process::Stdio::null());
 
                                 #[cfg(windows)]
-                                command.creation_flags(DETACHED_PROCESS);
+                                command.creation_flags(0x00000008);
 
                                 match command.spawn() {
                                     Ok(_) => true,
@@ -202,9 +232,31 @@ impl MainPage {
         )
         .size(20)
         .spacing(5);
+        let license_selectors = row![
+            text("License:").size(18),
+            radio(
+                LicenseType::Core,
+                LicenseType::Core,
+                self.chase_license,
+                Message::LicenseSelected
+            )
+            .size(15)
+            .spacing(5),
+            radio(
+                LicenseType::Fx,
+                LicenseType::Fx,
+                self.chase_license,
+                Message::LicenseSelected
+            )
+            .spacing(5)
+            .size(15)
+        ]
+        .spacing(10)
+        .align_items(Alignment::Center);
         let num_license_text = {
             text(format!(
-                "Core Licenses Count: {}",
+                "{} Licenses Count: {}",
+                String::from(self.chase_license.unwrap()),
                 self.num_core_lic
                     .map(|v| v.to_string())
                     .unwrap_or("---".to_string())
@@ -237,6 +289,7 @@ impl MainPage {
             self.status_image.view(),
             text(format!("Server Ping Count: {}", self.chaser_num_pings)).width(180),
             num_license_text,
+            license_selectors.width(Length::Fill),
             launch_houdini_chb.width(Length::Fill),
             bottom_row,
         ]
@@ -275,6 +328,7 @@ pub enum Message {
     WindowMoved(i32, i32),
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
+    LicenseSelected(LicenseType),
     SwitchPage(PageType),
     Settings(SettingsMessage),
 }
