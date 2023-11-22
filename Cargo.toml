@@ -14,6 +14,7 @@ reqwest = { version = "0.11.22", features = ["json"] }
 ctrlc = "3.4.1"
 iced = { git = "https://github.com/iced-rs/iced.git", rev="7dd32f3", features = ["tokio", "image"] }
 dirs = "5.0.1"
+rfd = "0.12.1"
 
 [dependencies.tokio]
 version = "1.33.0"

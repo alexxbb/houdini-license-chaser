@@ -1,5 +1,6 @@
 use crate::chaser;
 use crate::config::{AppCache, ConfigError, UserConfig};
+use crate::icons::icon;
 use crate::pages::{ErrorPage, SettingsMessage, SettingsPage};
 use crate::response::Product;
 use anyhow::Result;
@@ -27,14 +28,6 @@ pub(crate) const APP_NAME: &'static str = "houdini.license.chaser";
 use iced::widget::image::Handle;
 use image::{GenericImage, Rgba};
 
-use crate::ICON;
-#[derive(Debug, Clone)]
-enum StatusIcon {
-    Normal(&'static [u8]),
-    Warning(&'static [u8]),
-    Error(&'static [u8]),
-}
-
 struct PageIndex;
 #[allow(non_upper_case_globals)]
 impl PageIndex {
@@ -48,20 +41,6 @@ pub struct App {
     error_page: ErrorPage,
     current: PageType,
     cache: AppCache,
-}
-
-impl StatusIcon {
-    fn normal() -> Self {
-        Self::Normal(ICON)
-    }
-
-    fn warning() -> Self {
-        Self::Warning(ICON)
-    }
-
-    fn error() -> Self {
-        Self::Warning(ICON)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -272,7 +251,7 @@ impl MainPage {
         }
 
         let bottom_row = row![
-            action(new_icon(), Message::SwitchPage(PageType::Settings)),
+            button(icon('\u{e901}')).on_press(Message::SwitchPage(PageType::Settings)),
             button(
                 text("Exit")
                     .horizontal_alignment(Horizontal::Center)
@@ -331,6 +310,7 @@ pub enum Message {
     LicenseSelected(LicenseType),
     SwitchPage(PageType),
     Settings(SettingsMessage),
+    BrowseHoudiniExec,
 }
 
 impl Application for App {
@@ -403,7 +383,7 @@ impl Application for App {
                 return iced::window::close();
             }
             Message::Settings(settings_message) => match settings_message {
-                SettingsMessage::OkPressed => {
+                SettingsMessage::Save => {
                     if self.settings_page.check_input() {
                         if let Err(e) = self.settings_page.config.save() {
                             // TODO
@@ -490,14 +470,4 @@ fn action<'a, Message: Clone + 'a>(
         .style(theme::Button::Secondary)
         .on_press(on_press)
         .into()
-}
-
-fn new_icon<'a, Message>() -> Element<'a, Message> {
-    icon('\u{e994}')
-}
-
-fn icon<'a, Message>(codepoint: char) -> Element<'a, Message> {
-    const ICON_FONT: Font = Font::with_name("icomoon");
-
-    text(codepoint).font(ICON_FONT).size(16).into()
 }

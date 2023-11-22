@@ -1,4 +1,5 @@
 use crate::app::Message;
+use crate::icons::{ICON, ICON_WARN};
 use iced::widget::{column, image as image_widget, image::Handle, row};
 use iced::Element;
 use image::imageops::colorops;
@@ -33,15 +34,14 @@ impl StatusImage {
     }
     pub fn view(&self) -> Element<Message> {
         let image_handle = match &self.state {
-            IconState::Idle => Handle::from_memory(crate::ICON),
+            IconState::Idle => Handle::from_memory(ICON),
             IconState::Working => {
                 let mut img =
-                    image::load_from_memory_with_format(crate::ICON, image::ImageFormat::Png)
-                        .unwrap();
+                    image::load_from_memory_with_format(ICON, image::ImageFormat::Png).unwrap();
                 let colored = colorops::huerotate(&img, (self.frame * 2) as i32);
                 Handle::from_pixels(img.width(), img.height(), colored.to_vec())
             }
-            IconState::Error => Handle::from_memory(crate::ICON_WARN),
+            IconState::Error => Handle::from_memory(ICON_WARN),
         };
         image_widget(image_handle).width(70).into()
     }

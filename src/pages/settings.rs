@@ -1,5 +1,6 @@
 use crate::app::Message;
 use crate::config::{ConfigError, UserConfig};
+use crate::icons::icon;
 use iced::alignment::*;
 use iced::widget::{button, column, container, row, text, text_input, Space};
 use iced::{Color, Command, Element, Length, Size, Subscription};
@@ -12,9 +13,10 @@ pub struct SettingsPage {
 
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
-    OkPressed,
+    Save,
     ExecutableChanged(String),
     LicServerChanged(String),
+    BrowseHoudiniExec,
 }
 
 impl SettingsPage {
@@ -41,10 +43,15 @@ impl SettingsPage {
 
     #[rustfmt::skip]
     pub fn view(&self) -> Element<'_, Message> {
-        let save_button = button("Save").on_press(Message::Settings(SettingsMessage::OkPressed));
+        let save_button = button(text("Save").horizontal_alignment(Horizontal::Center))
+            .width(100)
+            .on_press(Message::Settings(SettingsMessage::Save));
         let config_path = UserConfig::config_file();
         let config_path = config_path.as_deref().map(|p|p.to_string_lossy())
             .expect("UserConfig path is valid");
+        let mut font = iced::Font::default();
+        font.weight = iced::font::Weight::Bold;
+        font.style = iced::font::Style::Italic;
         let content = column![
 
 
@@ -57,7 +64,7 @@ impl SettingsPage {
 
             Space::with_height(10),
 
-            text(config_path).width(Length::Fill).horizontal_alignment(Horizontal::Center),
+            text(config_path).size(14).width(Length::Fill).horizontal_alignment(Horizontal::Center).font(font),
 
             Space::with_height(10),
 
@@ -67,7 +74,8 @@ impl SettingsPage {
                 text("Houdini Executable:"),
                 text_input("Path to Houdini executable", &self.config.houdini_executable.to_string_lossy())
                     .width(Length::Fill)
-                    .on_input(|input|Message::Settings(SettingsMessage::ExecutableChanged(input)))
+                    .on_input(|input|Message::Settings(SettingsMessage::ExecutableChanged(input))),
+                button(icon('\u{e900}')).on_press(Message::Settings(SettingsMessage::BrowseHoudiniExec)),
             ]
                 .align_items(Alignment::Center)
                 .spacing(10)
@@ -110,6 +118,14 @@ impl SettingsPage {
                 }
                 SettingsMessage::LicServerChanged(value) => {
                     self.config.server_url = value;
+                }
+                SettingsMessage::BrowseHoudiniExec => {
+                    if let Some(picked) = rfd::FileDialog::new()
+                        .set_title("Select Houdini executable")
+                        .pick_file()
+                    {
+                        self.config.houdini_executable = picked;
+                    }
                 }
                 _ => {}
             },
