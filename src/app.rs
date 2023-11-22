@@ -147,6 +147,7 @@ impl MainPage {
                         .filter_map(|lic| {
                             let lic_type = LicenseType::from(&lic.product_id);
                             let selected_lic = self.chase_license.expect("always some");
+                            // TODO: Add Houdini version to the config
                             (selected_lic == lic_type && lic.version.major == 20)
                                 .then_some(lic.available)
                         })
@@ -154,7 +155,7 @@ impl MainPage {
                     self.num_core_lic = Some(available_core_lic);
 
                     if self.auto_launch_houdini && available_core_lic > 0 {
-                        let hbin = config.houdini_executable.clone();
+                        let hbin = config.houdini_executable(self.chase_license.unwrap());
                         self.chaser_subscribe = false;
                         self.chaser_running = false;
                         self.status_image.set_state(IconState::Idle);

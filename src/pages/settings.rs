@@ -14,7 +14,7 @@ pub struct SettingsPage {
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
     Save,
-    ExecutableChanged(String),
+    HfsChanged(String),
     LicServerChanged(String),
     BrowseHoudiniExec,
 }
@@ -30,8 +30,8 @@ impl SettingsPage {
     }
 
     pub fn check_input(&mut self) -> bool {
-        if !self.config.houdini_executable.exists() {
-            self.error = "Error: Invalid path to Houdini executable".to_owned();
+        if !self.config.hfs.join("bin").exists() {
+            self.error = "Error: Invalid HFS Path".to_owned();
             return false;
         }
         if self.config.server_url.is_empty() {
@@ -71,10 +71,10 @@ impl SettingsPage {
             Space::with_height(Length::Fill),
 
             row![
-                text("Houdini Executable:"),
-                text_input("Path to Houdini executable", &self.config.houdini_executable.to_string_lossy())
+                text("HFS Root:"),
+                text_input("Path to Houdini install", &self.config.hfs.to_string_lossy())
                     .width(Length::Fill)
-                    .on_input(|input|Message::Settings(SettingsMessage::ExecutableChanged(input))),
+                    .on_input(|input|Message::Settings(SettingsMessage::HfsChanged(input))),
                 button(icon('\u{e900}')).on_press(Message::Settings(SettingsMessage::BrowseHoudiniExec)),
             ]
                 .align_items(Alignment::Center)
@@ -113,18 +113,18 @@ impl SettingsPage {
     pub fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Settings(msg) => match msg {
-                SettingsMessage::ExecutableChanged(value) => {
-                    self.config.houdini_executable = std::path::PathBuf::from(value);
+                SettingsMessage::HfsChanged(value) => {
+                    self.config.hfs = std::path::PathBuf::from(value);
                 }
                 SettingsMessage::LicServerChanged(value) => {
                     self.config.server_url = value;
                 }
                 SettingsMessage::BrowseHoudiniExec => {
                     if let Some(picked) = rfd::FileDialog::new()
-                        .set_title("Select Houdini executable")
-                        .pick_file()
+                        .set_title("Select HFS Root")
+                        .pick_folder()
                     {
-                        self.config.houdini_executable = picked;
+                        self.config.hfs = picked;
                     }
                 }
                 _ => {}

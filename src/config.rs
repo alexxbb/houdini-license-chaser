@@ -1,4 +1,4 @@
-use crate::app::APP_NAME;
+use crate::app::{LicenseType, APP_NAME};
 use iced::futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Write};
@@ -30,12 +30,21 @@ pub fn save_config_file<T: Serialize>(value: T, path: impl AsRef<Path>) -> Resul
 }
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfig {
-    pub houdini_executable: PathBuf,
+    pub hfs: PathBuf,
     pub server_url: String,
 }
 
 impl UserConfig {
     const CONFIG_FILE: &'static str = "chaser.json";
+
+    pub fn houdini_executable(&self, lic_type: LicenseType) -> PathBuf {
+        let file = match lic_type {
+            LicenseType::Core => "houdinicore",
+            LicenseType::Fx => "houdinifx",
+            LicenseType::Other => "houdini",
+        };
+        self.hfs.join("bin").join(file)
+    }
 
     pub fn config_file() -> Result<PathBuf> {
         dirs::config_dir()
@@ -54,7 +63,7 @@ impl UserConfig {
     }
 
     pub fn is_valid(&self) -> bool {
-        !self.server_url.is_empty() && self.houdini_executable.exists()
+        !self.server_url.is_empty() && self.hfs.join("bin").exists()
     }
 }
 
