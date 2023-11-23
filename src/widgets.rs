@@ -43,6 +43,6 @@ impl StatusImage {
             }
             IconState::Error => Handle::from_memory(ICON_WARN),
         };
-        image_widget(image_handle).width(70).into()
+        image_widget(image_handle).width(70).height(50).into()
     }
 }

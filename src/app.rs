@@ -155,7 +155,7 @@ impl MainPage {
                     self.num_core_lic = Some(available_core_lic);
 
                     if self.auto_launch_houdini && available_core_lic > 0 {
-                        let hbin = config.houdini_executable(self.chase_license.unwrap());
+                        let (hbin, args) = config.houdini_args(self.chase_license.unwrap());
                         self.chaser_subscribe = false;
                         self.chaser_running = false;
                         self.status_image.set_state(IconState::Idle);
@@ -163,6 +163,7 @@ impl MainPage {
                             async move {
                                 let mut command = tokio::process::Command::new(hbin);
                                 command
+                                    .args(args)
                                     .stdout(std::process::Stdio::null())
                                     .stderr(std::process::Stdio::null())
                                     .stdin(std::process::Stdio::null());
@@ -286,7 +287,7 @@ impl MainPage {
     }
     fn subscription(&self, config: &UserConfig) -> Subscription<Message> {
         Subscription::batch(vec![if self.chaser_subscribe {
-            let server_url: Arc<str> = Arc::from(config.server_url.as_str());
+            let server_url: Arc<str> = Arc::from(format!("{}/api", config.server_url.as_str()));
             Subscription::batch(vec![
                 iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
                 chaser::subscribe(server_url),

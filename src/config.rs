@@ -37,13 +37,16 @@ pub struct UserConfig {
 impl UserConfig {
     const CONFIG_FILE: &'static str = "chaser.json";
 
-    pub fn houdini_executable(&self, lic_type: LicenseType) -> PathBuf {
-        let file = match lic_type {
-            LicenseType::Core => "houdinicore",
-            LicenseType::Fx => "houdinifx",
-            LicenseType::Other => "houdini",
+    pub fn houdini_args(&self, lic_type: LicenseType) -> (PathBuf, Vec<String>) {
+        let args = match lic_type {
+            LicenseType::Core => &["-core"],
+            LicenseType::Fx => &["-force-fx-license"],
+            LicenseType::Other => &[""],
         };
-        self.hfs.join("bin").join(file)
+        (
+            self.hfs.join("bin").join("houdini"),
+            args.iter().map(|s| s.to_string()).collect(),
+        )
     }
 
     pub fn config_file() -> Result<PathBuf> {
@@ -122,8 +125,4 @@ impl AppCache {
     pub fn save(&self) -> Result<()> {
         save_config_file(self, Self::cache_file()?)
     }
-
-    // pub fn store_windows_pos(&mut self, pos: [i32; 2]) {
-    //     self.window_position = pos;
-    // }
 }
