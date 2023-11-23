@@ -23,16 +23,46 @@ struct Keys(String, Vec<()>, HashMap<String, bool>);
 enum ChaserState {
     Starting,
     Working,
+    Sleeping,
 }
 
 #[derive(Debug, Clone)]
 pub enum ChaserEvent {
     ServerStarted,
+    ServerSleeping,
     ServerResponse(Arc<HashMap<String, Vec<License>>>),
-    ServerErrored,
+    ServerErrored(String),
 }
 
 static PARAMS: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+async fn send_request(
+    server_url: Arc<str>,
+) -> Result<HashMap<String, Vec<License>>, reqwest::Error> {
+    let client = reqwest::Client::builder().build().unwrap();
+
+    let params = PARAMS.get_or_init(|| {
+        let keys = Keys(
+            "cmd_ls".to_string(),
+            vec![],
+            HashMap::from([("show_licenses".to_string(), true)]),
+        );
+        let mut params = HashMap::new();
+        params.insert(
+            String::from("json"),
+            serde_json::to_string(&keys).expect("Keys should be valid JSON"),
+        );
+        params
+    });
+    let request = client
+        .post(server_url.as_ref())
+        .header(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-urlencoded"),
+        )
+        .form(&params);
+    request.send().await?.json().await
+}
 
 pub fn subscribe(server_url: Arc<str>) -> subscription::Subscription<Message> {
     subscription::unfold(
@@ -46,60 +76,22 @@ pub fn subscribe(server_url: Arc<str>) -> subscription::Subscription<Message> {
                         Message::ChaserEvent(ChaserEvent::ServerStarted),
                         ChaserState::Working,
                     ),
-                    ChaserState::Working => {
+                    ChaserState::Working => match send_request(server_url).await {
+                        Ok(data) => (
+                            Message::ChaserEvent(ChaserEvent::ServerResponse(Arc::new(data))),
+                            ChaserState::Sleeping,
+                        ),
+                        Err(e) => (
+                            Message::ChaserEvent(ChaserEvent::ServerErrored(e.to_string())),
+                            ChaserState::Sleeping,
+                        ),
+                    },
+                    ChaserState::Sleeping => {
                         tokio::time::sleep(Duration::from_secs(2)).await;
-
-                        let client = reqwest::Client::builder().build().unwrap();
-
-                        let params = PARAMS.get_or_init(|| {
-                            let keys = Keys(
-                                "cmd_ls".to_string(),
-                                vec![],
-                                HashMap::from([("show_licenses".to_string(), true)]),
-                            );
-                            let mut params = HashMap::new();
-                            params.insert(
-                                String::from("json"),
-                                serde_json::to_string(&keys).expect("Keys should be valid JSON"),
-                            );
-                            params
-                        });
-                        let request = client
-                            .post(server_url.as_ref())
-                            .header(
-                                CONTENT_TYPE,
-                                HeaderValue::from_static("application/x-www-urlencoded"),
-                            )
-                            .form(&params);
-
-                        match request.send().await {
-                            Ok(response) => {
-                                match response.json::<HashMap<String, Vec<License>>>().await {
-                                    Ok(resp) => (
-                                        Message::ChaserEvent(ChaserEvent::ServerResponse(
-                                            Arc::new(resp),
-                                        )),
-                                        ChaserState::Working,
-                                    ),
-                                    Err(e) => {
-                                        eprintln!("Deserialize error: {e:?}");
-                                        // TODO :Better error reporting
-                                        (
-                                            Message::ChaserEvent(ChaserEvent::ServerErrored),
-                                            ChaserState::Working,
-                                        )
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("Server response error: {e:?}");
-                                // TODO :Better error reporting
-                                (
-                                    Message::ChaserEvent(ChaserEvent::ServerErrored),
-                                    ChaserState::Working,
-                                )
-                            }
-                        }
+                        (
+                            Message::ChaserEvent(ChaserEvent::ServerSleeping),
+                            ChaserState::Working,
+                        )
                     }
                 }
             }

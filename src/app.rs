@@ -183,12 +183,12 @@ impl MainPage {
                         );
                     }
                 }
-                chaser::ChaserEvent::ServerErrored => {
-                    self.status_message = String::from("Chaser Error");
-                    self.status_image.set_state(IconState::Error);
+                chaser::ChaserEvent::ServerErrored(error_msg) => {
+                    self.status_message = error_msg;
                     self.chaser_subscribe = false;
                     self.status_image.set_state(IconState::Error);
                 }
+                chaser::ChaserEvent::ServerSleeping => {}
             },
             Message::AutoLaunchHoudini(value) => {
                 self.auto_launch_houdini = value;
