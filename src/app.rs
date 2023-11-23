@@ -305,7 +305,6 @@ pub enum Message {
     ChaserEvent(chaser::ChaserEvent),
     ExitApp,
     Tick,
-    MouseMoved(Point),
     WindowMoved(i32, i32),
     AutoLaunchHoudini(bool),
     HoudiniLaunched(bool),
@@ -315,10 +314,25 @@ pub enum Message {
     BrowseHoudiniExec,
 }
 
+impl App {
+    fn switch_to_page(&mut self, page_type: PageType) -> Command<Message> {
+        self.current = page_type;
+        let size = match page_type {
+            PageType::Main => MainPage::SIZE,
+            PageType::Settings => {
+                self.settings_page.error.clear();
+                SettingsPage::SIZE
+            }
+            PageType::Error => ErrorPage::SIZE,
+        };
+        iced::window::resize(size)
+    }
+}
+
 impl Application for App {
     type Executor = iced::executor::Default;
     type Message = Message;
-    type Theme = iced::theme::Theme;
+    type Theme = theme::Theme;
     type Flags = ();
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
@@ -335,7 +349,6 @@ impl Application for App {
                 if !config.is_valid() {
                     current_page = PageType::Settings;
                     error_message.write_str("Error: Check config values!");
-                    commands.push(iced::window::resize(SettingsPage::SIZE));
                 }
                 config
             }
@@ -343,11 +356,9 @@ impl Application for App {
                 match config_error {
                     ConfigError::Missing => {
                         current_page = PageType::Settings;
-                        commands.push(iced::window::resize(SettingsPage::SIZE));
                     }
                     e => {
                         current_page = PageType::Error;
-                        commands.push(iced::window::resize(ErrorPage::SIZE));
                         error_page.title = "Error Loading Config File".to_owned();
                         error_page.footer = "Tip: delete the config file and try again".to_owned();
                         error_page.body = e.to_string();
@@ -359,13 +370,15 @@ impl Application for App {
         let mut settings_page = SettingsPage::new(config);
         settings_page.error = error_message;
 
-        let app = App {
+        let mut app = App {
             main_page: MainPage::new(),
             settings_page,
             error_page,
             current: current_page,
             cache,
         };
+        let resize_command = app.switch_to_page(current_page);
+        commands.push(resize_command);
         (app, Command::batch(commands))
     }
 
@@ -375,14 +388,17 @@ impl Application for App {
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match &message {
-            Message::MouseMoved(_point) => Command::none(),
             Message::WindowMoved(x, y) => {
                 self.cache.window_position = [*x, *y];
                 Command::none()
             }
             Message::ExitApp => {
                 let _ = self.cache.save();
-                return iced::window::close();
+                match self.current {
+                    PageType::Main => return iced::window::close(),
+                    PageType::Settings => self.switch_to_page(PageType::Main),
+                    PageType::Error => self.switch_to_page(PageType::Main),
+                }
             }
             Message::Settings(settings_message) => match settings_message {
                 SettingsMessage::Save => {
@@ -391,8 +407,7 @@ impl Application for App {
                             // TODO
                             eprintln!("Could not save config");
                         }
-                        self.current = PageType::Main;
-                        iced::window::resize(MainPage::SIZE)
+                        self.switch_to_page(PageType::Main)
                     } else {
                         Command::none()
                     }
@@ -401,15 +416,7 @@ impl Application for App {
             },
             Message::SwitchPage(page) => {
                 self.current = page.clone();
-                let window_size = match page {
-                    PageType::Main => MainPage::SIZE,
-                    PageType::Settings => {
-                        self.settings_page.error.clear();
-                        SettingsPage::SIZE
-                    }
-                    PageType::Error => ErrorPage::SIZE,
-                };
-                iced::window::resize(window_size)
+                self.switch_to_page(page.clone())
             }
             other => match &mut self.current {
                 PageType::Main => self

@@ -1,7 +1,7 @@
 use iced::widget::text;
 use iced::{Element, Font};
 
-pub const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye2.png"));
+pub const ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/eye.png"));
 pub const ICON_WARN: &[u8] =
     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/warn.png"));
 pub const ICONS_TTF: &[u8] =
