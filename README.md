@@ -16,10 +16,9 @@ If you get caught cheating, create an issue in this repo, I want to know about i
 
 
 # Build & Run
-1. Make sure you have a Rust toolchain installed
-2. Clone the repository
-3 `cargo build --release` and copy the executable to your preferred location
-    - Or `cargo run --release` to start it right away.
+1. Make sure you have a Rust toolchain installed.
+2. Clone the repository.
+3. `cargo build --release` and copy the executable to your preferred location.
 
 **Tested on Windows and Mac**
 
