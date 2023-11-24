@@ -35,7 +35,7 @@ pub struct UserConfig {
 }
 
 impl UserConfig {
-    const CONFIG_FILE: &'static str = "chaser.json";
+    const CONFIG_FILE: &'static str = "config.json";
 
     pub fn houdini_args(&self, lic_type: LicenseType) -> (PathBuf, Vec<String>) {
         let args = match lic_type {
